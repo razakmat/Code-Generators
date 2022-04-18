@@ -173,6 +173,22 @@ namespace tinyc {
 
     };
 
+    class ASTArrayValue : public AST {
+    public:
+        std::vector<std::unique_ptr<AST>> values;
+
+        ASTArrayValue(Token const & t, std::vector<std::unique_ptr<AST>> v):
+            AST{t},
+            values{std::move(v)} {
+
+        }
+        void print(colors::ColorPrinter & p) const override;
+
+    protected:
+        void accept(ASTVisitor * v) override;
+
+    };
+
     /** Base class for all types.
 
      */
@@ -183,8 +199,6 @@ namespace tinyc {
             buildStringRepresentation(ss);
             return ss.str();
         }
-
-    protected:
         ASTType(Token const & t):
             AST{t} {
         }
@@ -197,7 +211,7 @@ namespace tinyc {
             type->buildStringRepresentation(s);
         }
 
-        void accept(ASTVisitor * v) override;
+        void accept(ASTVisitor * v) = 0;
 
     };
 
@@ -226,12 +240,12 @@ namespace tinyc {
     class ASTArrayType : public ASTType {
     public:
         std::unique_ptr<ASTType> base;
-        std::unique_ptr<AST> size;
+        size_t size;
 
-        ASTArrayType(Token const & t, std::unique_ptr<ASTType> base, std::unique_ptr<AST> size):
+        ASTArrayType(Token const & t, std::unique_ptr<ASTType> base, size_t size):
             ASTType{t},
             base{std::move(base)},
-            size{std::move(size)} {
+            size{size} {
         }
 
         void print(colors::ColorPrinter & p) const override;
@@ -918,13 +932,14 @@ namespace tinyc {
     class ASTVisitor {
     public:
 
-        virtual void visit(AST * ast) = 0;
+//        virtual void visit(AST * ast) = 0;
         virtual void visit(ASTInteger * ast) = 0;
         virtual void visit(ASTDouble * ast) = 0;
         virtual void visit(ASTChar * ast) = 0;
         virtual void visit(ASTString * ast) = 0;
         virtual void visit(ASTIdentifier * ast) = 0;
-        virtual void visit(ASTType * ast) = 0;
+        virtual void visit(ASTArrayValue * ast) = 0;
+ //       virtual void visit(ASTType * ast) = 0;
         virtual void visit(ASTPointerType * ast) = 0;
         virtual void visit(ASTArrayType * ast) = 0;
         virtual void visit(ASTNamedType * ast) = 0;
@@ -968,13 +983,14 @@ namespace tinyc {
 
     }; // tinyc::ASTVisitor
 
-    inline void AST::accept(ASTVisitor * v) { v->visit(this); }
+//    inline void AST::accept(ASTVisitor * v) { v->visit(this); }
     inline void ASTInteger::accept(ASTVisitor * v) { v->visit(this); }
     inline void ASTDouble::accept(ASTVisitor* v) { v->visit(this); }
     inline void ASTChar::accept(ASTVisitor * v) { v->visit(this); }
     inline void ASTString::accept(ASTVisitor * v) { v->visit(this); }
     inline void ASTIdentifier::accept(ASTVisitor * v) { v->visit(this); }
-    inline void ASTType::accept(ASTVisitor * v) { v->visit(this); }
+    inline void ASTArrayValue::accept(ASTVisitor * v) { v->visit(this); }
+//    inline void ASTType::accept(ASTVisitor * v) { v->visit(this); }
     inline void ASTPointerType::accept(ASTVisitor * v) { v->visit(this); }
     inline void ASTArrayType::accept(ASTVisitor * v) { v->visit(this); }
     inline void ASTNamedType::accept(ASTVisitor * v) { v->visit(this); }

@@ -20,12 +20,27 @@ namespace tinyc {
         p << LITERAL(value);
     }
 
+    void ASTArrayValue::print(colors::ColorPrinter & p) const 
+    {
+        {
+            p << SYMBOL("{");
+            for (uint32_t i = 0; i < values.size(); i++)
+            {
+                p << (*values[i]);
+                if (i < values.size() - 1)
+                    p << SYMBOL(",");
+            }
+            p << SYMBOL("}");
+        }
+    }
+
+
     void ASTPointerType::print(colors::ColorPrinter & p) const {
         p << (*base) << SYMBOL("*");
     }
 
     void ASTArrayType::print(colors::ColorPrinter & p) const {
-        p << (*base) << SYMBOL("[") << *size << SYMBOL("]");
+        p << (*base) << SYMBOL("[") << size << SYMBOL("]");
     }
 
     void ASTNamedType::print(colors::ColorPrinter & p) const  {

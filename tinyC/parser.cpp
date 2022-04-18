@@ -302,10 +302,11 @@ namespace tinyc {
                 std::unique_ptr<ASTType> type{TYPE()};
                 decl->fields.push_back(std::make_pair(IDENT(), std::move(type)));
                 if (condPop(Symbol::SquareOpen)) {
-                    std::unique_ptr<AST> index{E9()};
-                    pop(Symbol::SquareClose);
-                    // now we have to update the type
-                    decl->fields.back().second.reset(new ASTArrayType{start, std::move(decl->fields.back().second), std::move(index) });
+                    throw ParserError(STR("Array in struct is not allowed."),top().location(), eof());
+//                    std::unique_ptr<AST> index{E9()};
+//                    pop(Symbol::SquareClose);
+//                    // now we have to update the type
+//                    decl->fields.back().second.reset(new ASTArrayType{start, std::move(decl->fields.back().second), std::move(index) });
                 }
                 pop(Symbol::Semicolon);
             }
@@ -365,10 +366,23 @@ namespace tinyc {
         std::unique_ptr<ASTVarDecl> decl{new ASTVarDecl{start, TYPE()}};
         decl->name = IDENT();
         if (condPop(Symbol::SquareOpen)) {
-            std::unique_ptr<AST> index{E9()};
+//            std::unique_ptr<AST> index{E9()};
+//            pop(Symbol::SquareClose);
+//            // now we have to update the type
+//            decl->varType.reset(new ASTArrayType{start, std::move(decl->varType), std::move(index) });
             pop(Symbol::SquareClose);
-            // now we have to update the type
-            decl->varType.reset(new ASTArrayType{start, std::move(decl->varType), std::move(index) });
+            pop(Symbol::Assign);
+            Token const & startVal = top();
+            pop(Symbol::CurlyOpen);
+            std::vector<std::unique_ptr<AST>> values;
+            do{
+                values.push_back(E9());
+            }while(condPop(Symbol::Comma));
+            pop(Symbol::CurlyClose);
+            decl->varType.reset(new ASTArrayType{start, std::move(decl->varType), values.size()});
+            std::unique_ptr<ASTArrayValue> value{new ASTArrayValue{startVal,std::move(values)}};
+            decl->value = std::move(value);
+            return decl;
         }
         if (condPop(Symbol::Assign))
             decl->value = EXPR();
