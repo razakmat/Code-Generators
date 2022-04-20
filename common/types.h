@@ -88,10 +88,10 @@ namespace tiny {
 
         static std::unordered_map<std::string, Type*> & types();
 
-        static POD * voidType_;
-        static POD * intType_;
-        static POD * charType_;
-        static POD * doubleType_;
+        inline static POD * voidType_;
+        inline static POD * intType_;
+        inline static POD * charType_;
+        inline static POD * doubleType_;
 
     }; // tiny::Type
 
@@ -101,7 +101,11 @@ namespace tiny {
             name_{name} {
             assert(name_ == Symbol::KwInt || name_ == Symbol::KwChar || name_ == Symbol::KwDouble);
         }
-
+        virtual bool convertsToBoolean() const {
+            if (name_ == Symbol::KwDouble)
+                return false;
+            return true;
+        }
         Symbol name() const { return name_; }
 
         size_t size() const override {

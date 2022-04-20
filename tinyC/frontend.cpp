@@ -1,4 +1,6 @@
 #include "frontend.h"
+#include "ASTtoIR.h"
+#include "ast.h"
 
 namespace tinyc {
 
@@ -7,6 +9,14 @@ namespace tinyc {
 
     void Frontend::typecheck(AST * ast) {
         NOT_IMPLEMENTED;
+        Typechecker ty;
+        ty.visitChild(ast);
+        
+    }
+
+    void Frontend::astotir(AST * ast) {
+        ASTtoIR pokus;
+        pokus.visitChild(ast);
     }
 
 } // namespace tiny

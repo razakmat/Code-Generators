@@ -5,6 +5,7 @@
 #include "ast.h"
 #include "parser.h"
 #include "typechecker.h"
+#include "ASTtoIR.h"
 
 namespace tinyc {
 
@@ -31,6 +32,10 @@ namespace tinyc {
         void typecheck(AST * ast);
 
         void typecheck(std::unique_ptr<AST> const & ast) { typecheck(ast.get()); }
+
+        void astotir(AST * ast);
+
+        void astotir(std::unique_ptr<AST> const & ast) { astotir(ast.get()); }
 
     }; // tinyc::Frontend
 }

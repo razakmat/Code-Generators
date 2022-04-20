@@ -95,7 +95,7 @@ namespace tinyc {
                 if (right == left && (Type::isPOD(right) || Type::isPointer(right)))
                     ast->setType(Type::intType());
             }
-            else if (ast->op == Symbol::Eq || ast->op == Symbol::Neg)
+            else if (ast->op == Symbol::Eq || ast->op == Symbol::NEq)
             {
                 if (right == left)
                     ast->setType(Type::intType());
@@ -304,7 +304,14 @@ namespace tinyc {
             if (!ast->lvalue->hasAddress())
                 throw ParserError{STR("LValue of assignment has to have address."), ast->location()};
             if (left != right)
-                throw ParserError{STR("Can assign only same types"), ast->location()};
+            {
+                if (left == Type::intType() && right == Type::charType()){}
+                else if (left == Type::intType() && right == Type::doubleType()){}
+                else if (left == Type::doubleType() && right == Type::intType()){}
+                else if (left == Type::doubleType() && right == Type::charType()){}
+                else
+                    throw ParserError{STR("Can assign only some different types"), ast->location()};
+            }
             ast->setType(Type::voidType());
         }
 

@@ -8,7 +8,7 @@ using namespace tinyc;
 using namespace colors;
 
 char const * tests[] = {
-    "void main() {}", // 0
+    "int i = 0; void main() { int b = 5; b = b + 1; int a; int a = b; }", // 0
 };
 
 int main(int argc, char * argv[]) {
@@ -21,6 +21,7 @@ int main(int argc, char * argv[]) {
         std::cout << ColorPrinter::colorize(*ast) << std::endl;
 
         // typecheck
+        front.astotir(ast);
 
         // translate to IR
 
