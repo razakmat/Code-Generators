@@ -664,6 +664,15 @@ namespace tinyc
         visitChild(ast->target);
         m_leftValue = false;
 
+        if (Fun_address * addr = dynamic_cast<Fun_address*>(m_last))
+        {
+            LoadFun * ptr = new LoadFun();
+            ptr->m_address = addr;
+            m_block->m_block.push_back(ptr);
+            m_last = ptr;
+            return;
+        }
+
         LoadAddress * ptr = new LoadAddress();
         ptr->m_address = m_last;
         ptr->m_type = GetType(ast->type());
@@ -706,7 +715,12 @@ namespace tinyc
     
     void ASTtoIR::visit(ASTCall * ast)
     {
-        CallStatic * call = new CallStatic();
+        Instruction * call;
+        if (Type::isPointer(ast->function->type()))
+            call = new Call();
+        else
+            call = new CallStatic();
+
         call->m_type = GetType(ast->type());
 
         BorderCall * start = new BorderCall();
@@ -720,12 +734,21 @@ namespace tinyc
             StoreParam * arg = new StoreParam();
             arg->m_address = m_last;
             m_block->m_block.push_back(arg);
-            call->m_args.push_back(m_last);
+            if (Call * c = dynamic_cast<Call*>(call))
+                c->m_args.push_back(m_last);
+            if (CallStatic * c = dynamic_cast<CallStatic*>(call))
+                c->m_args.push_back(m_last);
         }
+
         m_leftValue = true;
         visitChild(ast->function);
         m_leftValue = false;
-        call->m_fun_addr = dynamic_cast<Fun_address*>(m_last);
+
+        if (Call * c = dynamic_cast<Call*>(call))
+            c->m_fun_addr = m_last;
+        if (CallStatic * c = dynamic_cast<CallStatic*>(call))
+            c->m_fun_addr = dynamic_cast<Fun_address*>(m_last);
+
         m_block->m_block.push_back(call);
         m_last = call;
         BorderCall * end = new BorderCall();

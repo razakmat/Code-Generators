@@ -51,12 +51,15 @@ namespace tiny {
         return a;
     }
     
-    Type::Function * Type::getOrCreateFunctionType(Symbol name , Type * ret) 
+    Type::Function * Type::getOrCreateFunctionType(Type * type) 
     {
+        std::string name = type->toString();
         auto & t = types();
-        auto i = t.find(name.name());
+        auto i = t.find(name);
         if (i == t.end())
-            i = t.insert(std::make_pair(name.name(), new Type::Function{name,ret})).first;
+            i = t.insert(std::make_pair(name,type)).first;
+        else
+            delete type;
         return dynamic_cast<Function*>(i->second);
     }
     
@@ -80,6 +83,15 @@ namespace tiny {
         if (test != nullptr)
             return true;
         return false;
+    }
+
+    Type::Function * Type::isFunPointer(Type * t)
+    {
+        Type::Pointer * pointer = dynamic_cast<Type::Pointer*>(t);
+        if (pointer != nullptr)
+            t = pointer->base();
+        Type::Function * fun = dynamic_cast<Type::Function*>(t);
+        return fun;
     }
 
     Type::POD * Type::BinaryResult(Type * right, Type * left)

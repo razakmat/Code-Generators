@@ -92,7 +92,7 @@ namespace tinyc {
 
     class LoadFun : public Instruction {
         public:
-            Instruction * m_address;
+            Fun_address * m_address;
         protected:
             void accept(IRVisitor * v) override;
     };

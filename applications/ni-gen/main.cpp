@@ -26,7 +26,6 @@ namespace tiny {
     Config config;
 }
 
-
 int main(int argc, char * argv[]) {
 
     config.parse(argc,argv);

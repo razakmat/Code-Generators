@@ -61,11 +61,12 @@ namespace tiny {
         static Type::Array * getOrCreateArrayType(Type * name);
         static Type * getType(Symbol name);
         static Type::Alias * CreateAliasType(Symbol name, Type * t);
-        static Type::Function * getOrCreateFunctionType(Symbol name, Type * ret);
+        static Type::Function * getOrCreateFunctionType(Type * type);
 
         static bool isPOD(Type * t);
         static bool isPointer(Type * t);
         static bool isFunction(Type * t);
+        static Type::Function * isFunPointer(Type * t);
         static Type::POD * BinaryResult(Type * right, Type * left);
 
         static void EntryBlockFrame();
@@ -223,8 +224,8 @@ namespace tiny {
 
     class Type::Function : public Type {
     public:
-        Function(Symbol name, Type * returnType):
-            name_{name}, returnType_{returnType} {
+        Function(Type * returnType):
+            returnType_{returnType} {
         }
 
         size_t size() const override { 
@@ -259,7 +260,6 @@ namespace tiny {
 
         }
 
-        Symbol name_;
         bool defined_ = false;
         std::vector<Type*> m_args;
         Type * returnType_;

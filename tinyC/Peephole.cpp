@@ -149,8 +149,6 @@ namespace tinyc
     void Peephole::visit(LoadFun * ir)
     {
         CheckType(ir);
-        if (!m_new_ones.empty())
-            ir->m_address = Check(ir->m_address);
     }
     
     void Peephole::visit(Alloc_g * ir)

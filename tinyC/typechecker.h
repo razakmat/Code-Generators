@@ -215,12 +215,14 @@ namespace tinyc {
 
         void visit(ASTFunDecl * ast) override {
             Type * ret = visitChild(ast->typeDecl);
-            Type::Function * fun = Type::getOrCreateFunctionType(ast->name,ret);
+            Type::Function * fun = new Type::Function(ret);
             for (auto & x : ast->args)
             {
                 Type * t = visitChild(x.first);
                 fun->addArg(t,x.second.get());  
             }
+
+            fun = Type::getOrCreateFunctionType(fun);
 
             if ( Type::SetVarType(ast->name.name(),fun) == false)
                 throw ParserError{STR("Name " << ast->name.name() << " is already used."), ast->location()};
@@ -233,6 +235,7 @@ namespace tinyc {
             Type * TypeBody = visitChild(ast->body);
             if (TypeBody != ret)
                 throw ParserError{STR("Conflicting return type of function"), ast->location()};
+            fun->markFullyDefined();
             Type::LeaveFrame();
             ast->setType(Type::voidType());
         }
@@ -243,20 +246,23 @@ namespace tinyc {
                 throw ParserError{STR("Type " << ast->name->name.name() << "was already declared."), ast->location()};
             Type * ret = visitChild(ast->returnType);
 
+            Type::Function * fun = new Type::Function(ret);
+
             if (!ret->isFullyDefined())
                 throw ParserError{STR("Return type " << ret->toString() << " is not yet fully defined."), ast->location()};
 
-
-            Type::Function * fun = Type::getOrCreateFunctionType(ast->name->name,ret);
             for (int i = 0; i < ast->args.size(); i++)
             {
                 t = visitChild(ast->args[i]);
                 fun->addArg(t,ast);
             }
+
+            fun = Type::getOrCreateFunctionType(fun);
+
             fun->markFullyDefined();
             Type::Pointer * p = Type::getOrCreatePointerType(fun);
             Type::Alias * a = Type::CreateAliasType(ast->name->name,p);
-            ast->setType(p);
+            ast->setType(a);
         }
 
         void visit(ASTSwitch * ast) override {
@@ -385,7 +391,7 @@ namespace tinyc {
 
         void visit(ASTCall * ast) override {
             Type * t = visitChild(ast->function);
-            Type::Function * p = dynamic_cast<Type::Function*>(t);
+            Type::Function * p = Type::isFunPointer(t);
             if (p == nullptr)
                 throw ParserError{STR("Call can be used only for type function."), ast->location()};
             if (p->sizeArgs() != ast->args.size())

@@ -17,6 +17,15 @@ namespace tinyc
     
     void IRTot86::visit(Call * ir)
     {
+        InsertToReg(ir->m_fun_addr);
+        m_last_label = m_pb.add(tiny::t86::CALL{Reg(ir->m_fun_addr->m_memVal)});
+
+        m_pb.add(ADD{Sp(),(int64_t)ir->m_args.size()});
+        if (ir->m_type != ResultType::Void){
+            m_pb.add(PUSH{Reg(m_max_regs-1)});
+            ir->m_memType = 'x';
+        }
+
     }
     
     void IRTot86::visit(CallStatic * ir)
@@ -34,7 +43,12 @@ namespace tinyc
     
     void IRTot86::visit(LoadFun * ir)
     {
-        
+        auto it = m_funs.find(ir->m_address->m_fun->m_name);
+        int regNum = NextReg();
+        m_last_label = m_pb.add(MOV{Reg(regNum),(int64_t)it->second});
+        ir->m_memType = 'r';
+        ir->m_memVal = regNum;
+        CheckSpill(ir);
     }
     
     void IRTot86::visit(Alloc_g * ir)
