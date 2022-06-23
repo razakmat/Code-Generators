@@ -61,6 +61,8 @@ namespace tinyc {
         // if there is body, parse it, otherwise leave empty as it is just a declaration
         if (top() == Symbol::CurlyOpen)
             result->body = BLOCK_STMT();
+        else
+            pop(Symbol::Semicolon);
         return result;
     }
 
@@ -97,6 +99,7 @@ namespace tinyc {
             pop(Symbol::ParOpen);
             std::unique_ptr<AST> expr(EXPR());
             pop(Symbol::ParClose);
+            pop(Symbol::Semicolon);
             return std::unique_ptr<AST>{new ASTWrite{op, std::move(expr)}};
         }
         else

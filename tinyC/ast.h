@@ -3,11 +3,11 @@
 #include <unordered_map>
 #include <memory>
 
-#include "common/helpers.h"
-#include "common/ast.h"
-#include "common/lexer.h"
-#include "common/symbol.h"
-#include "common/types.h"
+#include "../common/helpers.h"
+#include "../common/ast.h"
+#include "../common/lexer.h"
+#include "../common/symbol.h"
+#include "../common/types.h"
 
 namespace tinyc {
     using Type = tiny::Type;
@@ -367,7 +367,10 @@ namespace tinyc {
                 while (++i != args.end())
                     p << p.symbol << ", " << *(i->first) << " " << *(i->second);
             }
-            p << p.symbol << ")" << (*body);
+            if (body != nullptr)
+                p << p.symbol << ")" << (*body);
+            else
+                p << p.symbol << ")" << ";";
         }
 
     protected:
@@ -453,7 +456,7 @@ namespace tinyc {
     class ASTSwitch : public AST {
     public:
         std::unique_ptr<AST> cond;
-        AST *  defaultCase;
+        AST *  defaultCase = nullptr;
         std::vector<std::pair<int, std::unique_ptr<AST>>> cases;
 
         ASTSwitch(Token const & t):
@@ -843,8 +846,10 @@ namespace tinyc {
             auto i = args.begin();
             if (i != args.end()) {
                 p << **i;
-                while (++i != args.end())
+                while (++i != args.end()){
+                    p << ",";
                     p << p.symbol << **i;
+                }
             }
             p << p.symbol << ")";
         }

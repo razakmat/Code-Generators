@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ast.h"
-#include "common/types.h"
+#include "../common/types.h"
 
 namespace tinyc {
 
@@ -25,6 +25,7 @@ namespace tinyc {
         void visit(ASTString * ast) override {
             ast->setType(Type::getOrCreatePointerType(Type::charType()));
         }
+        
         void visit(ASTIdentifier * ast) override {
             Type * t = Type::GetVarType(ast->name.name());
             if (t == nullptr)
@@ -115,17 +116,26 @@ namespace tinyc {
         // Not, Inc, Dec, +, -, 
         void visit(ASTUnaryOp * ast) override {
             Type * t = visitChild(ast->arg);
+            
             if (ast->op == Symbol::Add || ast->op == Symbol::Sub) {
                 if (t == Type::intType() || t == Type::doubleType())
                     ast->setType(t);
                 else
                     throw ParserError{STR("Type of + or - has to be int or double."),ast->location()};
-            } else if (ast->op == Symbol::Not) {
+                return;
+            }
+            if (ast->op == Symbol::Not || ast->op == Symbol::Neg) {
                 if (t->convertsToBoolean())
                     ast->setType(Type::intType());
                 else
                     throw ParserError{STR("Type has to be convertible to boolean."),ast->location()};
-            } else if (ast->op == Symbol::Inc || ast->op == Symbol::Dec) {
+                return;
+            }
+
+            if (!ast->arg->hasAddress())
+                throw ParserError{STR("Argument in unary operator ++ or -- has to have address."),ast->location()};
+            
+            if (ast->op == Symbol::Inc || ast->op == Symbol::Dec) {
                 if (t == Type::intType() || t == Type::charType())
                     ast->setType(t);
                 else
@@ -135,6 +145,8 @@ namespace tinyc {
 
         void visit(ASTUnaryPostOp * ast) override {
             Type * t = visitChild(ast->arg);
+            if (!ast->arg->hasAddress())
+                throw ParserError{STR("Argument in unary operator has to have address."),ast->location()};
             if (t == Type::intType() || t == Type::charType())
                 ast->setType(t);
             else
@@ -204,7 +216,6 @@ namespace tinyc {
         void visit(ASTFunDecl * ast) override {
             Type * ret = visitChild(ast->typeDecl);
             Type::Function * fun = Type::getOrCreateFunctionType(ast->name,ret);
-
             for (auto & x : ast->args)
             {
                 Type * t = visitChild(x.first);
@@ -242,6 +253,7 @@ namespace tinyc {
                 t = visitChild(ast->args[i]);
                 fun->addArg(t,ast);
             }
+            fun->markFullyDefined();
             Type::Pointer * p = Type::getOrCreatePointerType(fun);
             Type::Alias * a = Type::CreateAliasType(ast->name->name,p);
             ast->setType(p);
@@ -274,10 +286,13 @@ namespace tinyc {
         }
 
         void visit(ASTFor * ast) override {
-            visitChild(ast->init);
-            if (! visitChild(ast->cond)->convertsToBoolean())
-                throw ParserError{STR("Condition must convert to bool, but " << ast->cond->type()->toString() << " found"), ast->cond->location()};
-            visitChild(ast->increment);
+            if (ast->init != nullptr)
+                visitChild(ast->init);
+            if (ast->cond != nullptr)
+                if (! visitChild(ast->cond)->convertsToBoolean())
+                    throw ParserError{STR("Condition must convert to bool, but " << ast->cond->type()->toString() << " found"), ast->cond->location()};
+            if (ast->increment != nullptr)
+                visitChild(ast->increment);
             visitChild(ast->body);
             ast->setType(Type::voidType());
         }
@@ -296,6 +311,7 @@ namespace tinyc {
                 t = visitChild(ast->value);
             if (Type::GetCurrentReturnType() != t)
                 throw ParserError{STR("Conflicting return type of function"), ast->location()};
+            ast->setType(t);
         }
 
         void visit(ASTAssignment * ast) override {
@@ -412,8 +428,13 @@ namespace tinyc {
                 throw ParserError{STR("This type of cast is not allowed."), ast->location()};
         }
 
-        void visit(ASTRead * ast) override {}
-        void visit(ASTWrite * ast) override {}
+        void visit(ASTRead * ast) override {
+            ast->setType(Type::voidType());
+        }
+        void visit(ASTWrite * ast) override {
+            Type * value = visitChild(ast->value);
+            ast->setType(value);
+        }
 
 
         Type * visitChild(AST * ast) {

@@ -78,7 +78,7 @@ namespace tinyc {
     void ASTSwitch::print(colors::ColorPrinter & p) const {
         p << KEYWORD("switch") << SYMBOL("(") << *cond << SYMBOL(") {") << INDENT; 
         for (auto & i : cases) 
-            p << NEWLINE << KEYWORD("case") << i.first << SYMBOL(": ") << *i.second;
+            p << NEWLINE << KEYWORD("case") << " "<< i.first << SYMBOL(": ") << *i.second;
         if (defaultCase != nullptr) 
             p << NEWLINE << KEYWORD("default") << SYMBOL(":") << *defaultCase;
         p << DEDENT << NEWLINE << SYMBOL("}");

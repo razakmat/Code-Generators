@@ -14,148 +14,234 @@ namespace tinyc
         
     }
 
+    IRProgram::~IRProgram()
+    {
+        for (auto & x : m_decls)
+            delete x;
+        for (auto & x : m_allocs_g)
+            delete x;
+        for (auto & x : m_funs)
+        {
+            delete x->m_addr;
+            for (auto & y : x->m_allocs)
+                delete y;
+            for (auto & y : x->m_args)
+                delete y;
+            for (auto & y : x->m_blocks)
+            {
+                for (auto & z : y->m_block){
+                    if (!dynamic_cast<Jump*>(z))
+                        delete z;
+                }
+            }
+        }
+    }
+
     Block::Block()
     :m_name(counter++)
     {
         
     }
 
-    Function::Function(Symbol name)
+    Function::Function(const std::string & name)
     :m_name(name)
     {
         
     }
     
-    Fun_address::Fun_address(Symbol name)
-    :m_name(name)
+    Fun_address::Fun_address(Function * fun)
+    :m_fun(fun)
     {
         
     }
     
-    BinaryOp::BinaryOp(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    BinaryOp::BinaryOp(Instruction * left, Instruction * right, ResultType t)
     :Instruction(t), m_left(left), m_right(right)
     {
     }
     
-    Mul::Mul(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    UnaryOp::UnaryOp(Instruction * ins,ResultType t)
+    :Instruction(t), m_left(ins)
+    {
+        
+    }
+    
+    Mul::Mul(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    Div::Div(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    Div::Div(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    Mod::Mod(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    Mod::Mod(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    Add::Add(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    Add::Add(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    Sub::Sub(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    Sub::Sub(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    ShL::ShL(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    ShL::ShL(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    ShR::ShR(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    ShR::ShR(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    Gt::Gt(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    CmpOp::CmpOp(Instruction * left, Instruction * right, ResultType t)
+    :BinaryOp(left,right,t)
+    {
+        m_cpm_jump = false;
+    }
+    
+    void CmpOp::SetCmpJump(bool b)
+    {
+        m_cpm_jump = b;
+    }
+    
+    bool CmpOp::GetCmpJump()
+    {
+        return m_cpm_jump;
+    }
+    
+    Gt::Gt(Instruction * left, Instruction * right, ResultType t)
+    :CmpOp(left,right,t)
+    {
+        
+    }
+    
+    Gte::Gte(Instruction * left, Instruction * right, ResultType t)
+    :CmpOp(left,right,t)
+    {
+        
+    }
+    
+    Lt::Lt(Instruction * left, Instruction * right, ResultType t)
+    :CmpOp(left,right,t)
+    {
+        
+    }
+    
+    Lte::Lte(Instruction * left, Instruction * right, ResultType t)
+    :CmpOp(left,right,t)
+    {
+        
+    }
+    
+    Eq::Eq(Instruction * left, Instruction * right, ResultType t)
+    :CmpOp(left,right,t)
+    {
+        
+    }
+    
+    NEq::NEq(Instruction * left, Instruction * right, ResultType t)
+    :CmpOp(left,right,t)
+    {
+        
+    }
+    
+    BitAnd::BitAnd(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    Gte::Gte(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    BitOr::BitOr(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    Lt::Lt(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    And::And(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    Lte::Lte(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
+    Or::Or(Instruction * left, Instruction * right, ResultType t)
     :BinaryOp(left,right,t)
     {
         
     }
     
-    Eq::Eq(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
-    :BinaryOp(left,right,t)
+    Plus::Plus(Instruction * ins, ResultType t)
+    :UnaryOp(ins,t)
     {
         
     }
     
-    NEq::NEq(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
-    :BinaryOp(left,right,t)
+    Minus::Minus(Instruction * ins, ResultType t)
+    :UnaryOp(ins,t)
     {
         
     }
     
-    BitAnd::BitAnd(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
-    :BinaryOp(left,right,t)
+    Not::Not(Instruction * ins, ResultType t)
+    :UnaryOp(ins,t)
     {
         
     }
     
-    BitOr::BitOr(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
-    :BinaryOp(left,right,t)
+    Neg::Neg(Instruction * ins, ResultType t)
+    :UnaryOp(ins,t)
     {
         
     }
     
-    And::And(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
-    :BinaryOp(left,right,t)
+    Inc::Inc(Instruction * ins, ResultType t)
+    :UnaryOp(ins,t)
     {
         
     }
     
-    Or::Or(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t)
-    :BinaryOp(left,right,t)
+    Dec::Dec(Instruction * ins, ResultType t)
+    :UnaryOp(ins,t)
     {
         
     }
     
-    Castctoi::Castctoi(std::shared_ptr<Instruction> & val)
+    Castctoi::Castctoi(Instruction * val)
     :Instruction(ResultType::Integer), m_val(val)
     {
     }
     
-    Castctod::Castctod(std::shared_ptr<Instruction> & val)
+    Castctod::Castctod(Instruction * val)
     :Instruction(ResultType::Double), m_val(val)
     {
     }
     
-    Castitod::Castitod(std::shared_ptr<Instruction> & val)
+    Castitod::Castitod(Instruction * val)
     :Instruction(ResultType::Double), m_val(val)
     {
     }
     
-    Castdtoi::Castdtoi(std::shared_ptr<Instruction> & val)
+    Castdtoi::Castdtoi(Instruction * val)
     :Instruction(ResultType::Integer), m_val(val)
+    {
+    }
+    
+    DebugWrite::DebugWrite(Instruction * val)
+    :m_val(val)
     {
     }
 

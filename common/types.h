@@ -80,7 +80,7 @@ namespace tiny {
             bool m_endOfScope;
             Type * returnType  = nullptr;
         };
-        static std::vector<frame> m_frames;
+        inline static std::vector<frame> m_frames;
 
         virtual void toStream(std::ostream & s) const = 0;
 
@@ -99,7 +99,7 @@ namespace tiny {
     public:
         POD(Symbol name): 
             name_{name} {
-            assert(name_ == Symbol::KwInt || name_ == Symbol::KwChar || name_ == Symbol::KwDouble);
+            assert(name_ == Symbol::KwInt || name_ == Symbol::KwChar || name_ == Symbol::KwDouble || name_ == Symbol::KwVoid);
         }
         virtual bool convertsToBoolean() const {
             if (name_ == Symbol::KwDouble)
@@ -132,6 +132,9 @@ namespace tiny {
 
         Pointer(Type * base):
             base_{base} {
+        }
+        virtual bool convertsToBoolean() const {
+            return true;
         }
 
         size_t size() const override { return 8; }
@@ -241,7 +244,19 @@ namespace tiny {
     private:
 
         void toStream(std::ostream & s) const override {
-            // TODO:
+            returnType_->toStream(s);
+            s << " (";
+            auto it = m_args.begin();
+            auto it1 = m_args.end();
+            if (it != it1) {
+                (*it)->toStream(s);
+                while (++it != it1) {
+                    s << ", ";
+                    (*it)->toStream(s);
+                }
+            }
+            s << ")";
+
         }
 
         Symbol name_;

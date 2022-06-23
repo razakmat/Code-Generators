@@ -7,13 +7,19 @@ namespace tinyc
     ASTtoIR::ASTtoIR()
     {
         m_env = nullptr;
-        m_block = std::make_shared<Block>();
         Block::counter = 0;
+        m_block = new Block();
+        m_prg = new IRProgram();
+    }
+    
+    ASTtoIR::~ASTtoIR()
+    {
+        delete m_block;
     }
 
     void ASTtoIR::visit(ASTInteger * ast)
     {
-        std::shared_ptr<Load_Imm_i> ptr = std::make_shared<Load_Imm_i>();
+        Load_Imm_i * ptr = new Load_Imm_i();
         ptr->m_value = ast->value;
         ptr->m_type = ResultType::Integer;
         m_block->m_block.push_back(ptr);
@@ -22,7 +28,7 @@ namespace tinyc
     
     void ASTtoIR::visit(ASTDouble * ast)
     {
-        std::shared_ptr<Load_Imm_d> ptr = std::make_shared<Load_Imm_d>();
+        Load_Imm_d * ptr = new Load_Imm_d();
         ptr->m_value = ast->value;
         ptr->m_type = ResultType::Double;
         m_block->m_block.push_back(ptr);
@@ -31,7 +37,7 @@ namespace tinyc
     
     void ASTtoIR::visit(ASTChar * ast)
     {
-        std::shared_ptr<Load_Imm_c> ptr = std::make_shared<Load_Imm_c>();
+        Load_Imm_c * ptr = new Load_Imm_c();
         ptr->m_value = ast->value;
         ptr->m_type = ResultType::Char;
         m_block->m_block.push_back(ptr);
@@ -49,23 +55,26 @@ namespace tinyc
             return ResultType::Char;
         else if (t == Type::doubleType())
             return ResultType::Double;
+        else if (t == Type::voidType())
+            return ResultType::Void;
         else
             return ResultType::Integer;
     }
     
     void ASTtoIR::NewBlock()
     {
+        if (m_block->m_block.empty())
+            m_block->m_block.push_back(new NOP());
         m_fun->m_blocks.push_back(m_block);
-        m_block = std::make_shared<Block>();
+        m_block = new Block();
     }
-
     
     void ASTtoIR::visit(ASTIdentifier * ast)
     {
         m_last = m_env->FindVar(ast->name);
         if (!m_leftValue)
         {
-            std::shared_ptr<Load> ptr = std::make_shared<Load>();
+            Load * ptr = new Load();
             ptr->m_address = m_last;
             ptr->m_type = GetType(ast->type());
             m_block->m_block.push_back(ptr);
@@ -93,7 +102,8 @@ namespace tinyc
 
     void ASTtoIR::visit(ASTSequence * ast)
     {
-        //TODO
+        for (auto & x : ast->body)
+            visitChild(x);
     }
     
     void ASTtoIR::visit(ASTBlock * ast)
@@ -106,14 +116,14 @@ namespace tinyc
     
     void ASTtoIR::visit(ASTVarDecl * ast)
     {
-        std::shared_ptr<Instruction> allocation;
+        Instruction * allocation;
         if (m_fun == nullptr){
-            allocation = std::make_shared<Alloc_g>();
-            m_allocs_g.push_back(allocation);
+            allocation = new Alloc_g();
+            m_prg->m_allocs_g.push_back(dynamic_cast<Alloc_g*>(allocation));
         }
         else{
-            allocation = std::make_shared<Alloc_l>();
-            m_fun->m_allocs.push_back(allocation);
+            allocation = new Alloc_l();
+            m_fun->m_allocs.push_back(dynamic_cast<Alloc_l*>(allocation));
         }
         m_last = allocation;
 
@@ -126,7 +136,7 @@ namespace tinyc
         else
         {
             visitChild(ast->value);
-            std::shared_ptr<Store> store = std::make_shared<Store>();
+            Store * store = new Store();
             store->m_type = ResultType::Void;
             store->m_address = allocation;
             store->m_value = m_last;
@@ -136,19 +146,25 @@ namespace tinyc
     
     void ASTtoIR::visit(ASTFunDecl * ast)
     {
-        std::shared_ptr<Function> fun = std::make_shared<Function>(ast->name);
-        std::shared_ptr<Block> prev = m_block;
-        m_block = std::make_shared<Block>();
+        for (auto & x : m_block->m_block){
+            m_prg->m_decls.push_back(x);
+        }
+        m_block->m_block.clear();
+
+        Function * fun = new Function(ast->name.name());
+        Block * prev = m_block;
+        m_block = new Block();
         
-        std::shared_ptr<Fun_address> fun_addr = std::make_shared<Fun_address>(ast->name);
+        Fun_address * fun_addr = new Fun_address(fun);
+        fun->m_addr = fun_addr;
 
         m_env->AddVar(ast->name,fun_addr);
 
         EnterEnv();
-
+        
         for (int i = 0; i < ast->args.size(); i++)
         {
-            std::shared_ptr<Alloc_arg> alloc = std::make_shared<Alloc_arg>();
+            Alloc_arg * alloc = new Alloc_arg();
             alloc->m_type = GetType(ast->args[i].first.get()->type());
             fun->m_args.push_back(alloc);
             m_env->AddVar(ast->args[i].second->name,alloc);
@@ -157,10 +173,14 @@ namespace tinyc
 
         visitChild(ast->body);
 
+        if (m_block->m_block.empty())
+            m_block->m_block.push_back(new NOP());
         fun->m_blocks.push_back(m_block);
         m_block = prev;
 
-        m_funs.insert(std::make_pair(m_fun->m_name,fun));
+        fun->m_res_type = GetType(ast->body->type());
+
+        m_prg->m_funs.push_back(fun);
         m_fun = nullptr;
 
         LeaveEnv();
@@ -176,10 +196,34 @@ namespace tinyc
         //TODO
     }
     
+    void ASTtoIR::ConditionAdjust()
+    {
+        if (CmpOp * cmpOp = dynamic_cast<CmpOp*>(m_last))
+        {
+            cmpOp->SetCmpJump(true);
+        }
+        else
+        {
+            if (m_last->m_type == ResultType::Integer){
+                Load_Imm_i * ptr = new Load_Imm_i();
+                ptr->m_value = 0;
+                ptr->m_type = ResultType::Integer;
+                m_block->m_block.push_back(ptr);
+                NEq * cmp = new NEq(m_last,ptr,ResultType::Integer);
+                cmp->SetCmpJump(true);
+                m_block->m_block.push_back(cmp);
+                m_last = cmp;
+            }
+        }
+    }
+
     void ASTtoIR::visit(ASTIf * ast)
     {
         visitChild(ast->cond);
-        std::shared_ptr<Jump_cond> cond_jump = std::make_shared<Jump_cond>();
+
+        ConditionAdjust();
+
+        Jump_cond * cond_jump = new Jump_cond();
         cond_jump->m_cond = m_last;
         m_block->m_block.push_back(cond_jump);
 
@@ -187,56 +231,103 @@ namespace tinyc
 
         cond_jump->m_true = m_block;
         visitChild(ast->trueCase);
-        std::shared_ptr<Jump> jump_true = std::make_shared<Jump>();
+        Jump * jump_true = new Jump();
         m_block->m_block.push_back(jump_true);
 
         NewBlock();
 
         cond_jump->m_false = m_block;
-        visitChild(ast->falseCase);
-        std::shared_ptr<Jump> jump_false = std::make_shared<Jump>();
-        m_block->m_block.push_back(jump_false);
-
-        NewBlock();
+        if (ast->falseCase != nullptr){
+            visitChild(ast->falseCase);
+            Jump * jump_false = new Jump();
+            m_block->m_block.push_back(jump_false);
+            NewBlock();
+            jump_false->m_label = m_block;
+        }
 
         jump_true->m_label = m_block;
-        jump_false->m_label = m_block;
     }
     
+    void ASTtoIR::SwitchCond(int val)
+    {
+        Load_Imm_i * ptr = new Load_Imm_i();
+        ptr->m_value = val;
+        ptr->m_type = ResultType::Integer;
+        m_block->m_block.push_back(ptr);
+        Eq * cmp = new Eq(m_last,ptr,ResultType::Integer);
+        cmp->SetCmpJump(true);
+        m_block->m_block.push_back(cmp);
+        m_last = cmp;
+    }
+
     void ASTtoIR::visit(ASTSwitch * ast)
     {
         visitChild(ast->cond);
-        std::shared_ptr<Cond_switch> switch_stmt = std::make_shared<Cond_switch>();
-        std::shared_ptr<Jump> jump = std::make_shared<Jump>();
+
+        Alloc_l * allocation = new Alloc_l();
+        m_fun->m_allocs.push_back(allocation);
+        allocation->m_type = m_last->m_type;
+        Store * store = new Store();
+        store->m_type = ResultType::Void;
+        store->m_address = allocation;
+        store->m_value = m_last;
+        m_block->m_block.push_back(store);
+
+        Jump * jump = new Jump();
+        Jump * defaultJ = new Jump();
+
+        std::vector<Jump_cond*> m_jumps;
+        for (auto & x : ast->cases)
+        {
+            Load * load = new Load();
+            load->m_address = allocation;
+            load->m_type = allocation->m_type;
+            m_block->m_block.push_back(load);
+            m_last = load;
+            SwitchCond(x.first);
+            Jump_cond * j = new Jump_cond();
+            j->m_cond = m_last;
+            m_block->m_block.push_back(j);
+            m_jumps.push_back(j);
+            NewBlock();
+            j->m_false = m_block;
+        }
+        if (ast->defaultCase != nullptr)
+        {
+            m_block->m_block.push_back(defaultJ);
+        }
+        else
+            m_block->m_block.push_back(jump);
 
         NewBlock();
 
-        for (auto & x : ast->cases)
+        for (int i = 0; i < ast->cases.size(); i++)
         {
-            switch_stmt->m_cases.insert(std::make_pair(x.first,m_block));
-            visitChild(x.second);
+            visitChild(ast->cases[i].second);
             m_block->m_block.push_back(jump);
+            m_jumps[i]->m_true = m_block;
             NewBlock();
         }
         if (ast->defaultCase != nullptr)
         {
-            switch_stmt->m_default = m_block;
             visitChild(ast->defaultCase);
             m_block->m_block.push_back(jump);
+            defaultJ->m_label = m_block;
             NewBlock();
         }
+            
         jump->m_label = m_block;
     }
     
     void ASTtoIR::AddJumpsContinueBreak()
     {
-        std::shared_ptr<Jump> jumpcb = std::make_shared<Jump>();
+        Jump * jumpcb = new Jump();
         m_continue.push_back(jumpcb);
-        jumpcb = std::make_shared<Jump>();
+        jumpcb = new Jump();
         m_break.push_back(jumpcb);
     }
     
-    void ASTtoIR::RemJumpsContinueBreak(std::shared_ptr<Block> & c, std::shared_ptr<Block> & b)
+    void ASTtoIR::RemJumpsContinueBreak(Block * c, Block * b)
     {
         m_continue.back()->m_label = c;
         m_continue.pop_back();
@@ -248,14 +339,17 @@ namespace tinyc
     {
         AddJumpsContinueBreak();
 
-        std::shared_ptr<Jump> jump = std::make_shared<Jump>();
+        Jump * jump = new Jump();
         m_block->m_block.push_back(jump);
 
         NewBlock();
 
         jump->m_label = m_block;
         visitChild(ast->cond);
-        std::shared_ptr<Jump_cond> jump_cond = std::make_shared<Jump_cond>();
+
+        ConditionAdjust();
+
+        Jump_cond * jump_cond = new Jump_cond();
         jump_cond->m_cond = m_last;
         m_block->m_block.push_back(jump_cond);
         
@@ -276,19 +370,22 @@ namespace tinyc
     {
         AddJumpsContinueBreak();
 
-        std::shared_ptr<Jump_cond> jump_cond = std::make_shared<Jump_cond>();
+        Jump_cond * jump_cond = new Jump_cond();
 
         NewBlock();
 
         jump_cond->m_true = m_block;
         visitChild(ast->body);
-        std::shared_ptr<Jump> jump = std::make_shared<Jump>();
+        Jump * jump = new Jump();
         m_block->m_block.push_back(jump);
 
         NewBlock();
 
         jump->m_label = m_block;
         visitChild(ast->cond);
+
+        ConditionAdjust();
+
         jump_cond->m_cond = m_last;
         m_block->m_block.push_back(jump_cond);
 
@@ -303,15 +400,28 @@ namespace tinyc
     {
         AddJumpsContinueBreak();
 
-        std::shared_ptr<Jump_cond> cond_jump = std::make_shared<Jump_cond>();
-        visitChild(ast->init);
-        std::shared_ptr<Jump> jump1 = std::make_shared<Jump>();
+        Jump_cond * cond_jump = new Jump_cond();
+        if (ast->init != nullptr)
+            visitChild(ast->init);
+        Jump * jump1 = new Jump();
         m_block->m_block.push_back(jump1);
 
         NewBlock();
 
         jump1->m_label = m_block;
-        visitChild(ast->cond);
+
+        if (ast->cond != nullptr)
+            visitChild(ast->cond);
+        else{
+            Load_Imm_i * load = new Load_Imm_i();
+            load->m_type = ResultType::Integer;
+            load->m_value = 1;
+            m_block->m_block.push_back(load);
+            m_last = load;
+        }
+
+        ConditionAdjust();
+
         cond_jump->m_cond = m_last;
         m_block->m_block.push_back(cond_jump);
 
@@ -319,13 +429,14 @@ namespace tinyc
 
         cond_jump->m_true = m_block;
         visitChild(ast->body);
-        std::shared_ptr<Jump> jump2 = std::make_shared<Jump>();
+        Jump * jump2 = new Jump();
         m_block->m_block.push_back(jump2);
 
         NewBlock();
 
         jump2->m_label = m_block;
-        visitChild(ast->increment);
+        if (ast->increment != nullptr)
+            visitChild(ast->increment);
         m_block->m_block.push_back(jump1);
 
         NewBlock();
@@ -347,7 +458,7 @@ namespace tinyc
     
     void ASTtoIR::visit(ASTReturn * ast)
     {
-        std::shared_ptr<Return> ret = std::make_shared<Return>();
+        Return * ret = new Return();
         if (ast->value != nullptr)
         {
             visitChild(ast->value);
@@ -360,7 +471,7 @@ namespace tinyc
         m_block->m_block.push_back(ret);
     }
     
-    std::shared_ptr<Instruction> ASTtoIR::AssignCast(ResultType left, ResultType right, std::shared_ptr<Instruction> & ins)
+    Instruction * ASTtoIR::AssignCast(ResultType left, ResultType right, Instruction * ins)
     {
         if (left != right)
         {
@@ -368,12 +479,12 @@ namespace tinyc
             {
                 if (right == ResultType::Char)
                 {
-                    std::shared_ptr<Castctoi> cast = std::make_shared<Castctoi>(ins);
+                    Castctoi * cast = new Castctoi(ins);
                     return cast;
                 }
                 else if (right == ResultType::Double)
                 {
-                    std::shared_ptr<Castdtoi> cast = std::make_shared<Castdtoi>(ins);
+                    Castdtoi * cast = new Castdtoi(ins);
                     return cast;
                 }
             }
@@ -381,12 +492,12 @@ namespace tinyc
             {
                 if (right == ResultType::Integer)
                 {
-                    std::shared_ptr<Castitod> cast = std::make_shared<Castitod>(ins);
+                    Castitod * cast = new Castitod(ins);
                     return cast;
                 }
                 else if (right == ResultType::Char)
                 {
-                    std::shared_ptr<Castctod> cast = std::make_shared<Castctod>(ins);
+                    Castctod * cast = new Castctod(ins);
                     return cast;
                 }
             }
@@ -396,7 +507,7 @@ namespace tinyc
 
     void ASTtoIR::visit(ASTAssignment * ast)
     {
-        std::shared_ptr<Store> store = std::make_shared<Store>();
+        Store * store = new Store();
         
         visitChild(ast->value);
         store->m_value = m_last;
@@ -407,7 +518,7 @@ namespace tinyc
 
         store->m_address = m_last;
 
-        AssignCast(store->m_address->m_type,store->m_value->m_type,store->m_value);
+        store->m_value = AssignCast(store->m_address->m_type,store->m_value->m_type,store->m_value);
 
         m_block->m_block.push_back(store);
     }
@@ -415,10 +526,10 @@ namespace tinyc
     void ASTtoIR::visit(ASTBinaryOp * ast)
     {
         visitChild(ast->left);
-        std::shared_ptr<Instruction> left = m_last;
+        Instruction * left = m_last;
 
         visitChild(ast->right);
-        std::shared_ptr<Instruction> right = m_last;
+        Instruction * right = m_last;
 
         ResultType t = GetType(ast->type());
 
@@ -434,58 +545,117 @@ namespace tinyc
                 ast->op == Symbol::Lt || ast->op == Symbol::Lte ||
                 ast->op == Symbol::Gt || ast->op == Symbol::Gte)
         {
-            ///TODO
+            t = GetType(ast->right->type());
+        }
+        else if (ast->op == Symbol::ShiftLeft || ast->op == Symbol::ShiftRight)
+        {
             t = GetType(ast->right->type());
         }
         
         if (ast->op == Symbol::Add)
-            m_last = std::make_shared<Add>(left,right,t);
+            m_last = new Add(left,right,t);
         else if (ast->op == Symbol::Sub)
-            m_last = std::make_shared<Sub>(left,right,t);
+            m_last = new Sub(left,right,t);
         else if (ast->op == Symbol::Mul)
-            m_last = std::make_shared<Mul>(left,right,t);
+            m_last = new Mul(left,right,t);
         else if (ast->op == Symbol::Div)
-            m_last = std::make_shared<Div>(left,right,t);
+            m_last = new Div(left,right,t);
         else if (ast->op == Symbol::Mod)
-            m_last = std::make_shared<Mod>(left,right,t);
+            m_last = new Mod(left,right,t);
         else if (ast->op == Symbol::BitAnd)
-            m_last = std::make_shared<BitAnd>(left,right,t);
+            m_last = new BitAnd(left,right,t);
         else if (ast->op == Symbol::BitOr)
-            m_last = std::make_shared<BitOr>(left,right,t);
+            m_last = new BitOr(left,right,t);
         else if (ast->op == Symbol::Eq)
-            m_last = std::make_shared<Eq>(left,right,t);
+            m_last = new Eq(left,right,t);
         else if (ast->op == Symbol::NEq)
-            m_last = std::make_shared<NEq>(left,right,t);
+            m_last = new NEq(left,right,t);
         else if (ast->op == Symbol::Lt)
-            m_last = std::make_shared<Lt>(left,right,t);
+            m_last = new Lt(left,right,t);
         else if (ast->op == Symbol::Lte)
-            m_last = std::make_shared<Lte>(left,right,t);
+            m_last = new Lte(left,right,t);
         else if (ast->op == Symbol::Gt)
-            m_last = std::make_shared<Gt>(left,right,t);
+            m_last = new Gt(left,right,t);
         else if (ast->op == Symbol::Gte)
-            m_last = std::make_shared<Gte>(left,right,t);
+            m_last = new Gte(left,right,t);
         else if (ast->op == Symbol::ShiftLeft)
-            m_last = std::make_shared<ShL>(left,right,t);
+            m_last = new ShL(left,right,t);
         else if (ast->op == Symbol::ShiftRight)
-            m_last = std::make_shared<ShR>(left,right,t);
+            m_last = new ShR(left,right,t);
         else if (ast->op == Symbol::And)
-            m_last = std::make_shared<And>(left,right,t);
+            m_last = new And(left,right,t);
         else if (ast->op == Symbol::Or)
-            m_last = std::make_shared<Or>(left,right,t);
+            m_last = new Or(left,right,t);
 
         m_block->m_block.push_back(m_last);
 
-        //TODO cast
     }
     
     void ASTtoIR::visit(ASTUnaryOp * ast)
     {
-        //TODO
+        visitChild(ast->arg);
+        ResultType t = GetType(ast->type());
+
+        Store * store = new Store();
+
+        if (ast->op == Symbol::Add)
+            m_last = new Plus(m_last,t);
+        else if (ast->op == Symbol::Sub)
+            m_last = new Minus(m_last,t);
+        else if (ast->op == Symbol::Not)
+            m_last = new Not(m_last,t);
+        else if (ast->op == Symbol::Inc)
+            m_last = new Inc(m_last,t);
+        else if (ast->op == Symbol::Dec)
+            m_last = new Dec(m_last,t);
+        else if (ast->op == Symbol::Neg)
+            m_last = new Neg(m_last,t);
+
+        m_block->m_block.push_back(m_last);
+
+        if (ast->op == Symbol::Dec || ast->op == Symbol::Inc)
+        {
+            store->m_value = m_last;
+
+            m_leftValue = true;
+            visitChild(ast->arg);
+            m_leftValue = false;
+
+            store->m_address = m_last;
+
+            m_block->m_block.push_back(store);
+        }
     }
     
     void ASTtoIR::visit(ASTUnaryPostOp * ast)
     {
-        //TODO
+        visitChild(ast->arg);
+        ResultType t = GetType(ast->type());
+
+        Store * store = new Store();
+
+
+        if (ast->op == Symbol::Inc)
+            m_last = new Inc(m_last,t);
+        else if (ast->op == Symbol::Dec)
+            m_last = new Dec(m_last,t);
+
+        m_block->m_block.push_back(m_last);
+
+        store->m_value = m_last;
+
+        visitChild(ast->arg);
+        Instruction * ins = m_last;
+
+        m_leftValue = true;
+        visitChild(ast->arg);
+        m_leftValue = false;
+
+        store->m_address = m_last;
+
+        m_block->m_block.push_back(store);
+
+        m_last = ins;
     }
     
     void ASTtoIR::visit(ASTAddress * ast)
@@ -493,6 +663,13 @@ namespace tinyc
         m_leftValue = true;
         visitChild(ast->target);
         m_leftValue = false;
+
+        LoadAddress * ptr = new LoadAddress();
+        ptr->m_address = m_last;
+        ptr->m_type = GetType(ast->type());
+        m_block->m_block.push_back(ptr);
+        m_last = ptr;
+        
     }
     
     void ASTtoIR::visit(ASTDeref * ast)
@@ -504,7 +681,7 @@ namespace tinyc
         }
         else{
             visitChild(ast->target);
-            std::shared_ptr<Load> ptr = std::make_shared<Load>();
+            LoadDeref * ptr = new LoadDeref();
             ptr->m_address = m_last;
             ptr->m_type = GetType(ast->type());
             m_block->m_block.push_back(ptr);
@@ -529,23 +706,45 @@ namespace tinyc
     
     void ASTtoIR::visit(ASTCall * ast)
     {
-        std::shared_ptr<CallStatic> call = std::make_shared<CallStatic>();
+        CallStatic * call = new CallStatic();
         call->m_type = GetType(ast->type());
+
+        BorderCall * start = new BorderCall();
+        start->m_start = true;
+        start->m_call = call;
+        m_block->m_block.push_back(start);
 
         for (auto & x : ast->args)
         {
             visitChild(x);
+            StoreParam * arg = new StoreParam();
+            arg->m_address = m_last;
+            m_block->m_block.push_back(arg);
             call->m_args.push_back(m_last);
         }
+        m_leftValue = true;
         visitChild(ast->function);
-        call->m_fun_addr = m_last;
+        m_leftValue = false;
+        call->m_fun_addr = dynamic_cast<Fun_address*>(m_last);
         m_block->m_block.push_back(call);
         m_last = call;
+        BorderCall * end = new BorderCall();
+        end->m_start = false;
+        end->m_call = call;
+        m_block->m_block.push_back(end);
     }
     
     void ASTtoIR::visit(ASTCast * ast)
     {
-        //TODO
+        visitChild(ast->value);
+        AST * a = ast;
+        ResultType t = GetType(a->type());
+
+        if (t == ResultType::Integer && m_last->m_type == ResultType::Double)
+            m_last = new Castdtoi(m_last);
+        else if (t == ResultType::Double && m_last->m_type == ResultType::Integer)
+            m_last = new Castitod(m_last);
+        
     }
     
     void ASTtoIR::visit(ASTRead * ast)
@@ -555,7 +754,10 @@ namespace tinyc
     
     void ASTtoIR::visit(ASTWrite * ast)
     {
-        //TODO
+        visitChild(ast->value);
+        DebugWrite * write = new DebugWrite(m_last);
+        m_block->m_block.push_back(write);
+        m_last = write;
     }
     
     void ASTtoIR::visitChild(AST * ast)
@@ -567,28 +769,37 @@ namespace tinyc
     void ASTtoIR::visitChild(std::unique_ptr<T> const & ptr)
     {
         visitChild(ptr.get());
+    }
+    
+    IRProgram * ASTtoIR::getIR() 
+    {
+        return m_prg;
     } 
 
 
     void ASTtoIR::EnterEnv()
     {
-        std::shared_ptr<Env> m_now = std::make_shared<Env>();
-        m_now->m_prev = m_env;
-        m_env = m_now;
+        Env * now = new Env();
+        now->m_prev = m_env;
+        m_env = now;
     }
     
     void ASTtoIR::LeaveEnv()
     {
+        Env * now = m_env;
         m_env = m_env->m_prev;
+        delete now;
     }
     
-    void ASTtoIR::Env::AddVar(Symbol name, std::shared_ptr<Instruction> ins)
+    void ASTtoIR::Env::AddVar(Symbol name, Instruction * ins)
     {
-        m_map.insert(std::make_pair(name,ins));
+        auto it = m_map.insert(std::make_pair(name,ins));
+        if (!it.second)
+            throw std::runtime_error("Variable '" + name.name() + "' was already declared.");
     }
 
 
-    std::shared_ptr<Instruction> ASTtoIR::Env::FindVar(Symbol name)
+    Instruction * ASTtoIR::Env::FindVar(Symbol name)
     {
         auto it = m_map.find(name);
         if (it != m_map.end())

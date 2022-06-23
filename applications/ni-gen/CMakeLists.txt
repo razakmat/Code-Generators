@@ -5,4 +5,4 @@ project(${PROJECT_NAME})
 
 file(GLOB_RECURSE SRC "*.cpp" "*.h")
 add_executable(${PROJECT_NAME} ${SRC})
-target_link_libraries(${PROJECT_NAME} libtinyc libcommon)
+target_link_libraries(${PROJECT_NAME} libtinyc libcommon libt86)

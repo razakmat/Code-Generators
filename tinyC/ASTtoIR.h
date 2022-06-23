@@ -12,6 +12,7 @@ namespace tinyc {
     class ASTtoIR : public ASTVisitor {
         public:
             ASTtoIR();
+            ~ASTtoIR();
             void visit(ASTInteger * ast);
             void visit(ASTDouble * ast);
             void visit(ASTChar * ast);
@@ -52,29 +53,30 @@ namespace tinyc {
             void visitChild(AST * ast);
             template<typename T>
             void visitChild(std::unique_ptr<T> const & ptr);
+            IRProgram * getIR();
         protected:
             ResultType GetType(Type * t);
             void NewBlock();
-            std::shared_ptr<Instruction> AssignCast(ResultType left, ResultType right, std::shared_ptr<Instruction> & ins);
+            Instruction * AssignCast(ResultType left, ResultType right, Instruction * ins);
+            void ConditionAdjust();
+            void SwitchCond(int val);
             void AddJumpsContinueBreak();
-            void RemJumpsContinueBreak(std::shared_ptr<Block> & c, std::shared_ptr<Block> & b);
+            void RemJumpsContinueBreak(Block * c, Block * b);
             void EnterEnv();
             void LeaveEnv();
             struct Env {
-                std::shared_ptr<Instruction> FindVar(Symbol name);
-                void AddVar(Symbol name, std::shared_ptr<Instruction> ins);
-                std::unordered_map<Symbol, std::shared_ptr<Instruction>> m_map;
-                std::shared_ptr<Env> m_prev = nullptr;
+                Instruction * FindVar(Symbol name);
+                void AddVar(Symbol name, Instruction * ins);
+                std::unordered_map<Symbol, Instruction*> m_map;
+                Env * m_prev = nullptr;
             };
-            std::unordered_map<Symbol,std::shared_ptr<Function>> m_funs;
-            std::shared_ptr<Env> m_env;
-            std::shared_ptr<Function> m_fun = nullptr;
-            std::shared_ptr<Block> m_block = nullptr;
-            std::shared_ptr<Instruction> m_last;
-            std::vector<std::shared_ptr<Instruction>> m_allocs_g;
+            Env * m_env;
+            Function * m_fun = nullptr;
+            Block * m_block = nullptr;
+            Instruction * m_last;
             bool m_leftValue = false;
-            std::vector<std::shared_ptr<Jump>> m_continue;
-            std::vector<std::shared_ptr<Jump>> m_break;
-
+            std::vector<Jump*> m_continue;
+            std::vector<Jump*> m_break;
+            IRProgram * m_prg = nullptr;
     };
 }

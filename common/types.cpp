@@ -3,7 +3,7 @@
 namespace tiny {
 
     Type::Struct * Type::getOrCreateStructType(Symbol name) {
-        auto t = types();
+        auto & t = types();
         auto i = t.find(name.name());
         if (i == t.end())
             i = t.insert(std::make_pair(name.name(), new Type::Struct{name})).first;
@@ -12,7 +12,7 @@ namespace tiny {
 
     Type::Pointer * Type::getOrCreatePointerType(Type * name) {
         std::string typeName = "*" + name->toString();
-        auto t = types();
+        auto & t = types();
         auto i = t.find(typeName);
         if (i == t.end())
             i = t.insert(std::make_pair(typeName, new Type::Pointer{name})).first;
@@ -21,7 +21,7 @@ namespace tiny {
 
     Type::Array * Type::getOrCreateArrayType(Type * name) {
         std::string typeName = "[" + name->toString() + "]";
-        auto t = types();
+        auto & t = types();
         auto i = t.find(typeName);
         if (i == t.end())
             i = t.insert(std::make_pair(typeName, new Type::Array{name})).first;
@@ -30,7 +30,7 @@ namespace tiny {
     
     Type * Type::getType(Symbol name) 
     {
-        auto t = types();
+        auto & t = types();
         auto i = t.find(name.name());
         if (i == t.end())
             return nullptr;
@@ -44,7 +44,7 @@ namespace tiny {
     Type::Alias * Type::CreateAliasType(Symbol name, Type * t) 
     {
         Type::Alias * a = new Type::Alias(name,t);
-        auto it = types();
+        auto & it = types();
         auto i = it.insert(std::make_pair(name.name(),a));
         if (!i.second)
             return nullptr;
@@ -53,7 +53,7 @@ namespace tiny {
     
     Type::Function * Type::getOrCreateFunctionType(Symbol name , Type * ret) 
     {
-        auto t = types();
+        auto & t = types();
         auto i = t.find(name.name());
         if (i == t.end())
             i = t.insert(std::make_pair(name.name(), new Type::Function{name,ret})).first;
@@ -100,7 +100,12 @@ namespace tiny {
     {
         frame now;
         now.m_endOfScope = false;
-        now.returnType = m_frames.back().returnType;
+        if (m_frames.size() != 0)
+            now.returnType = m_frames.back().returnType;
+        else{
+            types();
+            now.returnType = Type::voidType();
+        }
         m_frames.push_back(std::move(now));
     }
     

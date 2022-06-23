@@ -2,11 +2,14 @@
 
 #include <vector>
 #include <memory>
+#include <string>
 #include "ast.h"
-#include "common/types.h"
+#include "../common/types.h"
 
 namespace tinyc {
     
+    class Alloc_l;
+    class Alloc_arg;
     class IRVisitor;
     enum class ResultType {
         Integer,
@@ -20,54 +23,76 @@ namespace tinyc {
             Instruction();
             Instruction(ResultType t);
             ResultType m_type;
+            char m_memType; // 'r' - register, 's' - stack, 'm' - memory, 'x  - spill, 'i' - integer;
+            int64_t m_memVal;
         protected:
+            friend class IRVisitor;
             virtual void accept(IRVisitor * v) = 0;
     };
 
     class Block {
         public:
             Block();
-            std::vector<std::shared_ptr<Instruction>> m_block;
+            std::vector<Instruction*> m_block;
             int m_name;
             inline static int counter;
     };
-
+    class Fun_address;
     class Function {
         public:
-            Function(Symbol name);
-            Symbol m_name;
-            std::vector<std::shared_ptr<Block>> m_blocks;
-            std::vector<std::shared_ptr<Instruction>> m_args;
-            std::vector<std::shared_ptr<Instruction>> m_allocs;
+            Function(const std::string & name);
+            std::string m_name;
+            std::vector<Block*> m_blocks;
+            std::vector<Alloc_arg*> m_args;
+            std::vector<Alloc_l*> m_allocs;
+            ResultType m_res_type;
+            Fun_address * m_addr;
     };
 
     class Fun_address : public Instruction {
         public:
-            Fun_address(Symbol name);
-            Symbol m_name;
+            Fun_address(Function * fun);
+            Function * m_fun;
+        protected:
+            void accept(IRVisitor * v) override;
+    };
+
+
+    class BorderCall : public Instruction {
+        public:
+            bool m_start;
+            Instruction * m_call;
+        protected:
+            void accept(IRVisitor * v) override;
+    };
+
+    class StoreParam : public Instruction {
+        public:
+            Instruction * m_address;
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Call : public Instruction {
         public:
-            std::shared_ptr<Instruction> m_fun_addr;
-            std::vector<std::shared_ptr<Instruction>> m_args;
+            Instruction * m_fun_addr;
+            std::vector<Instruction*> m_args;
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class CallStatic : public Instruction {
         public:
-            std::shared_ptr<Instruction> m_fun_addr;
-            std::vector<std::shared_ptr<Instruction>> m_args;
+            Fun_address * m_fun_addr;
+            std::vector<Instruction*> m_args;
+            BorderCall * m_start;
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class LoadFun : public Instruction {
         public:
-            std::shared_ptr<Instruction> m_address;
+            Instruction * m_address;
         protected:
             void accept(IRVisitor * v) override;
     };
@@ -95,7 +120,7 @@ namespace tinyc {
 
     class Load : public Instruction {
         public:
-            std::shared_ptr<Instruction> m_address;
+            Instruction *  m_address;
         protected:
             void accept(IRVisitor * v) override;
     };
@@ -123,249 +148,298 @@ namespace tinyc {
 
     class Store : public Instruction {
         public:
-            std::shared_ptr<Instruction> m_address;
-            std::shared_ptr<Instruction> m_value;
+            Instruction *  m_address;
+            Instruction * m_value;
+        protected:
+            void accept(IRVisitor * v) override;
+    };
+
+    class LoadAddress : public Instruction {
+        public:
+            Instruction * m_address;
+        protected:
+            void accept(IRVisitor * v) override;
+    };
+
+    class LoadDeref : public Instruction {
+        public:
+            Instruction * m_address;
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Return : public Instruction {
         public:
-            std::shared_ptr<Instruction> m_res;
+            Instruction * m_res;
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Jump_cond : public Instruction {
         public:
-            std::shared_ptr<Instruction> m_cond;
-            std::shared_ptr<Block> m_true;
-            std::shared_ptr<Block> m_false;
+            Instruction * m_cond;
+            Block *  m_true;
+            Block * m_false;
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Jump : public Instruction {
         public:
-            std::shared_ptr<Block> m_label;
+            Block * m_label;
         protected:
             void accept(IRVisitor * v) override;
     };
-
-    class Cond_switch : public Instruction {
-        public:
-            std::shared_ptr<Instruction> m_cond;
-            std::unordered_map<int,std::shared_ptr<Block>> m_cases;
-            std::shared_ptr<Block> m_default;
-        protected:
-            void accept(IRVisitor * v) override;
-    };
-
 
     class BinaryOp : public Instruction {
         public:
-            BinaryOp(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
-            std::shared_ptr<Instruction> m_left;
-            std::shared_ptr<Instruction> m_right;
+            BinaryOp(Instruction * left, Instruction * right, ResultType t);
+            Instruction * m_left;
+            Instruction * m_right;
         protected:
-            virtual void accept(IRVisitor * v) = 0;
+            virtual void accept(IRVisitor * v);
     };
 
     class UnaryOp : public Instruction {
         public:
-            std::shared_ptr<Instruction> m_left;
+            UnaryOp(Instruction * ins,ResultType t);
+            Instruction * m_left;
         protected:
-            virtual void accept(IRVisitor * v) = 0;
+            virtual void accept(IRVisitor * v);
     };
 
 
 
     class Mul : public BinaryOp {
         public:
-            Mul(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Mul(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Div : public BinaryOp {
         public:
-            Div(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Div(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Mod : public BinaryOp {
         public:
-            Mod(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Mod(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Add : public BinaryOp {
         public:
-            Add(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Add(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Sub : public BinaryOp {
         public:
-            Sub(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Sub(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class ShL : public BinaryOp {
         public:
-            ShL(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            ShL(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class ShR : public BinaryOp {
         public:
-            ShR(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            ShR(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
-    class Gt : public BinaryOp {
+    class CmpOp : public BinaryOp {
         public:
-            Gt(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            CmpOp(Instruction * left, Instruction * right, ResultType t);
+            void SetCmpJump(bool b);
+            bool GetCmpJump();
+        protected:
+            virtual void accept(IRVisitor * v) = 0;
+            bool m_cpm_jump;
+    };
+
+    class Gt : public CmpOp {
+        public:
+            Gt(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
-    class Gte : public BinaryOp {
+    class Gte : public CmpOp {
         public:
-            Gte(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Gte(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
-    class Lt : public BinaryOp {
+    class Lt : public CmpOp {
         public:
-            Lt(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Lt(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
-    class Lte : public BinaryOp {
+    class Lte : public CmpOp {
         public:
-            Lte(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Lte(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
-    class Eq : public BinaryOp {
+    class Eq : public CmpOp {
         public:
-            Eq(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Eq(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
-    class NEq : public BinaryOp {
+    class NEq : public CmpOp {
         public:
-            NEq(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            NEq(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class BitAnd : public BinaryOp {
         public:
-            BitAnd(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            BitAnd(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class BitOr : public BinaryOp {
         public:
-            BitOr(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            BitOr(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class And : public BinaryOp {
         public:
-            And(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            And(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Or : public BinaryOp {
         public:
-            Or(std::shared_ptr<Instruction> & left, std::shared_ptr<Instruction> & right, ResultType t);
+            Or(Instruction * left, Instruction * right, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Plus : public UnaryOp {
         public:
+            Plus(Instruction * ins, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Minus : public UnaryOp {
         public:
+            Minus(Instruction * ins, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Not : public UnaryOp {
         public:
+            Not(Instruction * ins, ResultType t);
+        protected:
+            void accept(IRVisitor * v) override;
+    };
+
+    class Neg : public UnaryOp {
+        public:
+            Neg(Instruction * ins, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Inc : public UnaryOp {
         public:
+            Inc(Instruction * ins, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Dec : public UnaryOp {
         public:
+            Dec(Instruction * ins, ResultType t);
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Castctoi : public Instruction {
         public:
-            Castctoi(std::shared_ptr<Instruction> & val);
-            std::shared_ptr<Instruction> m_val;
+            Castctoi(Instruction * val);
+            Instruction * m_val;
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Castctod : public Instruction {
         public:
-            Castctod(std::shared_ptr<Instruction> & val);
-            std::shared_ptr<Instruction> m_val;
+            Castctod(Instruction * val);
+            Instruction * m_val;
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Castitod : public Instruction {
         public:
-            Castitod(std::shared_ptr<Instruction> & val);
-            std::shared_ptr<Instruction> m_val;
+            Castitod(Instruction * val);
+            Instruction * m_val;
         protected:
             void accept(IRVisitor * v) override;
     };
 
     class Castdtoi : public Instruction {
         public:
-            Castdtoi(std::shared_ptr<Instruction> & val);
-            std::shared_ptr<Instruction> m_val;
+            Castdtoi(Instruction * val);
+            Instruction * m_val;
         protected:
             void accept(IRVisitor * v) override;
     };
 
+    class NOP : public Instruction {
+        public:
+        protected:
+            void accept(IRVisitor * v) override;
+    };
+
+    class DebugWrite : public Instruction {
+        public:
+            DebugWrite(Instruction * val);
+            Instruction * m_val;
+        protected:
+            void accept(IRVisitor * v) override;
+    };
+
+    class IRProgram {
+        public:
+            ~IRProgram();
+            std::vector<Function*> m_funs;
+            std::vector<Instruction*> m_decls;
+            std::vector<Alloc_g*> m_allocs_g;
+    };
 
     class IRVisitor {
         public:
-            virtual void visit(Instruction * ir) = 0;
             virtual void visit(Fun_address * ir) = 0;
+            virtual void visit(BorderCall * ir) = 0;
+            virtual void visit(StoreParam * ir) = 0;
             virtual void visit(Call * ir) = 0;
             virtual void visit(CallStatic * ir) = 0;
             virtual void visit(LoadFun * ir) = 0;
@@ -377,12 +451,11 @@ namespace tinyc {
             virtual void visit(Load_Imm_c * ir) = 0;
             virtual void visit(Load_Imm_d * ir) = 0;
             virtual void visit(Store * ir) = 0;
+            virtual void visit(LoadAddress * ir) = 0;
+            virtual void visit(LoadDeref * ir) = 0;
             virtual void visit(Return * ir) = 0;
             virtual void visit(Jump_cond * ir) = 0;
             virtual void visit(Jump * ir) = 0;
-            virtual void visit(Cond_switch * ir) = 0;
-            virtual void visit(BinaryOp * ir) = 0;
-            virtual void visit(UnaryOp * ir) = 0;
             virtual void visit(Mul * ir) = 0;
             virtual void visit(Div * ir) = 0;
             virtual void visit(Mod * ir) = 0;
@@ -403,12 +476,19 @@ namespace tinyc {
             virtual void visit(Plus * ir) = 0;
             virtual void visit(Minus * ir) = 0;
             virtual void visit(Not * ir) = 0;
+            virtual void visit(Neg * ir) = 0;
             virtual void visit(Inc * ir) = 0;
             virtual void visit(Dec * ir) = 0;
             virtual void visit(Castctoi * ir) = 0;
             virtual void visit(Castctod * ir) = 0;
             virtual void visit(Castitod * ir) = 0;
             virtual void visit(Castdtoi * ir) = 0;
+            virtual void visit(DebugWrite * ir) = 0;
+            virtual void visit(NOP * ir) = 0;
+        protected:
+            void visitChild(Instruction * child) {
+                child->accept(this);
+            }
     };
 
 
@@ -419,14 +499,20 @@ namespace tinyc {
     inline void Alloc_g::accept(IRVisitor * v) { v->visit(this); }
     inline void Alloc_l::accept(IRVisitor * v) { v->visit(this); }
     inline void Store::accept(IRVisitor * v) { v->visit(this); }
+    inline void LoadAddress::accept(IRVisitor * v) { v->visit(this); }
+    inline void LoadDeref::accept(IRVisitor * v) { v->visit(this); }
+    inline void LoadFun::accept(IRVisitor * v) { v->visit(this); }
     inline void Alloc_arg::accept(IRVisitor * v) { v->visit(this); }
     inline void Jump_cond::accept(IRVisitor * v) { v->visit(this); }
     inline void Jump::accept(IRVisitor * v) { v->visit(this); }
-    inline void Cond_switch::accept(IRVisitor * v) { v->visit(this); }
     inline void Return::accept(IRVisitor * v) { v->visit(this); }
+    inline void BorderCall::accept(IRVisitor * v) { v->visit(this); }
+    inline void StoreParam::accept(IRVisitor * v) { v->visit(this); }
     inline void CallStatic::accept(IRVisitor * v) { v->visit(this); }
     inline void Call::accept(IRVisitor * v) { v->visit(this); }
     inline void Fun_address::accept(IRVisitor * v) { v->visit(this); }
+    inline void BinaryOp::accept(IRVisitor * v) {  }
+    inline void UnaryOp::accept(IRVisitor * v) {  }
     inline void Mul::accept(IRVisitor * v) { v->visit(this); }
     inline void Div::accept(IRVisitor * v) { v->visit(this); }
     inline void Mod::accept(IRVisitor * v) { v->visit(this); }
@@ -444,8 +530,16 @@ namespace tinyc {
     inline void NEq::accept(IRVisitor * v) { v->visit(this); }
     inline void BitOr::accept(IRVisitor * v) { v->visit(this); }
     inline void BitAnd::accept(IRVisitor * v) { v->visit(this); }
+    inline void Plus::accept(IRVisitor * v) { v->visit(this); }
+    inline void Minus::accept(IRVisitor * v) { v->visit(this); }
+    inline void Not::accept(IRVisitor * v) { v->visit(this); }
+    inline void Neg::accept(IRVisitor * v) { v->visit(this); }
+    inline void Inc::accept(IRVisitor * v) { v->visit(this); }
+    inline void Dec::accept(IRVisitor * v) { v->visit(this); }
     inline void Castctoi::accept(IRVisitor * v) { v->visit(this); }
     inline void Castctod::accept(IRVisitor * v) { v->visit(this); }
     inline void Castitod::accept(IRVisitor * v) { v->visit(this); }
     inline void Castdtoi::accept(IRVisitor * v) { v->visit(this); }
+    inline void DebugWrite::accept(IRVisitor * v) { v->visit(this); }
+    inline void NOP::accept(IRVisitor * v) {v->visit(this); }
 }

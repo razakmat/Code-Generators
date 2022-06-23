@@ -5,6 +5,7 @@ include_directories(${CMAKE_SOURCE_DIR})
 
 add_subdirectory(common)
 add_subdirectory(tinyC)
+add_subdirectory(tiny86)
 
 add_subdirectory(applications/ni-gen)
 
