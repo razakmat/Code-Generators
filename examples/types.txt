@@ -1,0 +1,23 @@
+
+
+void main() 
+{
+    int a = 0;
+    int * b = &a;
+    int ** c = &b;
+    **c = 5;
+    print(a++);      //5
+    print(a);        //6
+
+    int d;
+    int e;
+
+    d = a < 7;        
+    e = 6 == a;
+    print(d + e);     //2
+
+    a = -5 * 3 + a / 3;
+
+    print(*b);        //13
+
+}

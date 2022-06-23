@@ -1,0 +1,17 @@
+int foo(int a,int b,int c,int d,int e,int f,int g,int h,int i,int j, int k,int l)
+{
+    return a + b + c + d + e + f + g + h + i + j + k + j;
+}
+
+int boo()
+{
+    return 1;
+}
+
+void main() 
+{
+    int a = 1;
+    int b = 0;
+    a = foo(a, 5 >= 3, b + a , 4 * 5 - 19, boo() , 0 + 0 * 0 , 4 >> 2 , 1 << 1, a - b, a + a + a + a - 4, -1 ,b); // 8
+    print(a);
+}
