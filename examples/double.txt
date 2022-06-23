@@ -1,0 +1,25 @@
+
+int boo(double a)
+{
+    return cast<int>(a);
+}
+
+double foo (int a)
+{
+    return cast<double>(a);
+}
+
+void main() 
+{
+    double a = 3.4;
+    double * b = &a;
+    double ** c = &b;
+    **c = 5.5;
+
+    int d = boo(**c);
+
+    a = foo(d);
+
+    print(d + a);
+
+}

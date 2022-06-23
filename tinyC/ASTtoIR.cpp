@@ -480,11 +480,13 @@ namespace tinyc
                 if (right == ResultType::Char)
                 {
                     Castctoi * cast = new Castctoi(ins);
+                    m_block->m_block.push_back(cast);
                     return cast;
                 }
                 else if (right == ResultType::Double)
                 {
                     Castdtoi * cast = new Castdtoi(ins);
+                    m_block->m_block.push_back(cast);
                     return cast;
                 }
             }
@@ -493,11 +495,13 @@ namespace tinyc
                 if (right == ResultType::Integer)
                 {
                     Castitod * cast = new Castitod(ins);
+                    m_block->m_block.push_back(cast);
                     return cast;
                 }
                 else if (right == ResultType::Char)
                 {
                     Castctod * cast = new Castctod(ins);
+                    m_block->m_block.push_back(cast);
                     return cast;
                 }
             }
@@ -517,8 +521,9 @@ namespace tinyc
         m_leftValue = false;
 
         store->m_address = m_last;
+        store->m_type = GetType(ast->lvalue->type());
 
-        store->m_value = AssignCast(store->m_address->m_type,store->m_value->m_type,store->m_value);
+        store->m_value = AssignCast(store->m_type,store->m_value->m_type,store->m_value);
 
         m_block->m_block.push_back(store);
     }
@@ -538,8 +543,8 @@ namespace tinyc
             ast->op == Symbol::Mod || ast->op == Symbol::BitAnd ||
             ast->op == Symbol::BitOr)
         {
-            left = AssignCast(t,m_last->m_type,left);
-            right = AssignCast(t,m_last->m_type,right);
+            left = AssignCast(t,left->m_type,left);
+            right = AssignCast(t,right->m_type,right);
         }
         else if (ast->op == Symbol::Eq || ast->op == Symbol::NEq ||
                 ast->op == Symbol::Lt || ast->op == Symbol::Lte ||
@@ -767,6 +772,7 @@ namespace tinyc
             m_last = new Castdtoi(m_last);
         else if (t == ResultType::Double && m_last->m_type == ResultType::Integer)
             m_last = new Castitod(m_last);
+        m_block->m_block.push_back(m_last);
         
     }
     

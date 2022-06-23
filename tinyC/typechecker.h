@@ -91,14 +91,10 @@ namespace tinyc {
                         ast->setType(left);
             }
             else if (ast->op == Symbol::Gte || ast->op == Symbol::Gt || 
-                     ast->op == Symbol::Lt || ast->op == Symbol::Lte)
+                     ast->op == Symbol::Lt || ast->op == Symbol::Lte ||
+                     ast->op == Symbol::Eq || ast->op == Symbol::NEq)
             {
                 if (right == left && (Type::isPOD(right) || Type::isPointer(right)))
-                    ast->setType(Type::intType());
-            }
-            else if (ast->op == Symbol::Eq || ast->op == Symbol::NEq)
-            {
-                if (right == left)
                     ast->setType(Type::intType());
             }
             else if (ast->op == Symbol::BitAnd || ast->op == Symbol::BitOr)

@@ -3,11 +3,13 @@ namespace tinyc
 {
     using namespace tiny::t86;
 
-    IRTot86::IRTot86(int maxReg)
+    IRTot86::IRTot86(int maxReg,int maxFreg)
     :m_max_regs(maxReg), m_last_label(Label::empty()), m_jump_label(Label::empty())
     {
         for (int i = 0; i < maxReg; i++)
             m_regs.insert(i);
+        for (int i = 0; i < maxFreg; i++)
+            m_fregs.insert(i);
     }
     
     void IRTot86::visit(Fun_address * ir)
@@ -21,8 +23,13 @@ namespace tinyc
         m_last_label = m_pb.add(tiny::t86::CALL{Reg(ir->m_fun_addr->m_memVal)});
 
         m_pb.add(ADD{Sp(),(int64_t)ir->m_args.size()});
-        if (ir->m_type != ResultType::Void){
+        if (ir->m_type == ResultType::Integer){
             m_pb.add(PUSH{Reg(m_max_regs-1)});
+            ir->m_memType = 'x';
+        }
+        else if (ir->m_type == ResultType::Double)
+        {
+            m_pb.add(FPUSH{FReg(m_max_fregs-1)});
             ir->m_memType = 'x';
         }
 
@@ -35,9 +42,14 @@ namespace tinyc
 
         m_pb.add(ADD{Sp(),(int64_t)ir->m_args.size()});
 
-        if (ir->m_fun_addr->m_fun->m_res_type != ResultType::Void){
-                m_pb.add(PUSH{Reg(m_max_regs-1)});
-                ir->m_memType = 'x';
+        if (ir->m_fun_addr->m_fun->m_res_type == ResultType::Integer){
+            m_pb.add(PUSH{Reg(m_max_regs-1)});
+            ir->m_memType = 'x';
+        }
+        else if (ir->m_fun_addr->m_fun->m_res_type == ResultType::Double)
+        {
+            m_pb.add(FPUSH{FReg(m_max_fregs-1)});
+            ir->m_memType = 'x';
         }
     }
     
@@ -73,17 +85,40 @@ namespace tinyc
     {
         if (ir->m_address->m_memType == 's')
         {
-            int regNum = NextReg();
-            m_last_label = m_pb.add(MOV{Reg(regNum), Mem(Bp() - ir->m_address->m_memVal)});
-            ir->m_memType = 'r';
-            ir->m_memVal = regNum;
+            if (ir->m_type == ResultType::Double)
+            {
+                int regNum = NextFReg();
+                int regN = NextReg();
+                m_pb.add(MOV{Reg(regN),Mem(Bp() - ir->m_address->m_memVal)});
+                m_pb.add(MOV{FReg(regNum),Reg(regN)});
+                m_regs.insert(regN);
+                ir->m_memType = 'r';
+                ir->m_memVal = regNum;
+            }
+            else
+            {
+                int regNum = NextReg();
+                m_last_label = m_pb.add(MOV{Reg(regNum), Mem(Bp() - ir->m_address->m_memVal)});
+                ir->m_memType = 'r';
+                ir->m_memVal = regNum;                
+            }
         }
         else
         {
-            int regNum = NextReg();
-            m_last_label = m_pb.add(MOV{Reg(regNum), Mem(ir->m_address->m_memVal)});
-            ir->m_memType = 'r';
-            ir->m_memVal = regNum;
+            if (ir->m_type == ResultType::Double)
+            {
+                int regNum = NextFReg();
+                m_last_label = m_pb.add(MOV{FReg(regNum), Mem(ir->m_address->m_memVal)});
+                ir->m_memType = 'r';
+                ir->m_memVal = regNum;
+            }
+            else
+            {
+                int regNum = NextReg();
+                m_last_label = m_pb.add(MOV{Reg(regNum), Mem(ir->m_address->m_memVal)});
+                ir->m_memType = 'r';
+                ir->m_memVal = regNum;
+            }
         }
         CheckSpill(ir);
     }
@@ -110,26 +145,51 @@ namespace tinyc
     
     void IRTot86::visit(Load_Imm_d * ir)
     {
-        
+        int regNum = NextFReg();
+        m_last_label = m_pb.add(MOV{FReg(regNum), ir->m_value});
+        ir->m_memType = 'r';
+        ir->m_memVal = regNum;
+        CheckSpill(ir);
     }
     
     void IRTot86::visit(Store * ir)
     {
-        InsertToReg(ir->m_value);
+        if (ir->m_value->m_type == ResultType::Double)
+        {
+            InsertToFReg(ir->m_value);
 
-        if (ir->m_address->m_memType == 's')
-            m_last_label = m_pb.add(MOV{Mem(Bp() - ir->m_address->m_memVal), Reg(ir->m_value->m_memVal)});
-        else if (ir->m_address->m_memType == 'm')
-            m_last_label = m_pb.add(MOV{Mem(ir->m_address->m_memVal), Reg(ir->m_value->m_memVal)});
-        else{
-            InsertToReg(ir->m_address);
-            m_last_label = m_pb.add(MOV{Mem(Reg(ir->m_address->m_memVal)),Reg(ir->m_value->m_memVal)});
-            m_regs.insert(ir->m_address->m_memVal);
+            if (ir->m_address->m_memType == 's')
+                m_last_label = m_pb.add(MOV{Mem(Bp() - ir->m_address->m_memVal), FReg(ir->m_value->m_memVal)});
+            else if (ir->m_address->m_memType == 'm')
+                m_last_label = m_pb.add(MOV{Mem(ir->m_address->m_memVal), FReg(ir->m_value->m_memVal)});
+            else{
+                InsertToReg(ir->m_address);
+                m_last_label = m_pb.add(MOV{Mem(Reg(ir->m_address->m_memVal)),FReg(ir->m_value->m_memVal)});
+                m_regs.insert(ir->m_address->m_memVal);
+            }
+
+            ir->m_memType = ir->m_address->m_memType;
+            ir->m_memVal = ir->m_address->m_memVal;
+            m_fregs.insert(ir->m_value->m_memVal);
         }
+        else{
 
-        ir->m_memType = ir->m_address->m_memType;
-        ir->m_memVal = ir->m_address->m_memVal;
-        m_regs.insert(ir->m_value->m_memVal);
+            InsertToReg(ir->m_value);
+
+            if (ir->m_address->m_memType == 's')
+                m_last_label = m_pb.add(MOV{Mem(Bp() - ir->m_address->m_memVal), Reg(ir->m_value->m_memVal)});
+            else if (ir->m_address->m_memType == 'm')
+                m_last_label = m_pb.add(MOV{Mem(ir->m_address->m_memVal), Reg(ir->m_value->m_memVal)});
+            else{
+                InsertToReg(ir->m_address);
+                m_last_label = m_pb.add(MOV{Mem(Reg(ir->m_address->m_memVal)),Reg(ir->m_value->m_memVal)});
+                m_regs.insert(ir->m_address->m_memVal);
+            }
+
+            ir->m_memType = ir->m_address->m_memType;
+            ir->m_memVal = ir->m_address->m_memVal;
+            m_regs.insert(ir->m_value->m_memVal);
+        }
     }
     
     void IRTot86::visit(LoadAddress * ir)
@@ -158,11 +218,21 @@ namespace tinyc
 
     void IRTot86::visit(LoadDeref * ir)
     {
-        InsertToReg(ir->m_address);
-        int regNum = NextReg();
+        int regNum;
+        if (ir->m_type == ResultType::Double)
+        {
+            InsertToFReg(ir->m_address);
+            regNum = NextFReg();
 
-        m_last_label = m_pb.add(MOV{Reg(regNum), Mem(Reg(ir->m_address->m_memVal))});
+            m_last_label = m_pb.add(MOV{FReg(regNum), Mem(Reg(ir->m_address->m_memVal))});
+        }
+        else
+        {
+            InsertToReg(ir->m_address);
+            regNum = NextReg();
 
+            m_last_label = m_pb.add(MOV{Reg(regNum), Mem(Reg(ir->m_address->m_memVal))});
+        }
         m_regs.insert(ir->m_address->m_memVal);
         ir->m_memType = 'r';
         ir->m_memVal = regNum;
@@ -173,9 +243,19 @@ namespace tinyc
     {
         if (ir->m_res != nullptr)
         {
-            InsertToReg(ir->m_res);
-            m_pb.add(MOV{Reg(m_max_regs-1),Reg(ir->m_res->m_memVal)});
-            m_regs.insert(ir->m_res->m_memVal);
+            if (ir->m_res->m_type == ResultType::Double)
+            {
+                InsertToFReg(ir->m_res);
+                m_pb.add(MOV{FReg(m_max_fregs-1),FReg(ir->m_res->m_memVal)});
+                m_fregs.insert(ir->m_res->m_memVal);
+            }
+            else
+            {
+                InsertToReg(ir->m_res);
+                m_pb.add(MOV{Reg(m_max_regs-1),Reg(ir->m_res->m_memVal)});
+                m_regs.insert(ir->m_res->m_memVal);                
+            }
+
         }
         Label ret = m_pb.add(JMP{Label::empty()});
         m_rets.push_back(ret);
@@ -198,6 +278,18 @@ namespace tinyc
     
     void IRTot86::visit(Mul * ir)
     {
+        if (ir->m_type == ResultType::Double)
+        {
+        InsertToFReg(ir->m_right);
+        InsertToFReg(ir->m_left);
+
+        m_last_label = m_pb.add(FMUL{FReg(ir->m_left->m_memVal),FReg(ir->m_right->m_memVal)});
+        m_fregs.insert(ir->m_right->m_memVal);
+        ir->m_memType = 'r';
+        ir->m_memVal = ir->m_left->m_memVal;
+        }
+        else{
+
         InsertToReg(ir->m_right);
         InsertToReg(ir->m_left);
 
@@ -206,11 +298,24 @@ namespace tinyc
         ir->m_memType = 'r';
         ir->m_memVal = ir->m_left->m_memVal;
 
+        }
         CheckSpill(ir);
     }
     
     void IRTot86::visit(Div * ir)
     {
+        if (ir->m_type == ResultType::Double)
+        {
+        InsertToFReg(ir->m_right);
+        InsertToFReg(ir->m_left);
+
+        m_last_label = m_pb.add(FDIV{FReg(ir->m_left->m_memVal),FReg(ir->m_right->m_memVal)});
+        m_fregs.insert(ir->m_right->m_memVal);
+        ir->m_memType = 'r';
+        ir->m_memVal = ir->m_left->m_memVal;
+        }
+        else{
+
         InsertToReg(ir->m_right);
         InsertToReg(ir->m_left);
 
@@ -219,6 +324,7 @@ namespace tinyc
         ir->m_memType = 'r';
         ir->m_memVal = ir->m_left->m_memVal;
 
+        }
         CheckSpill(ir);
     }
     
@@ -237,6 +343,18 @@ namespace tinyc
     
     void IRTot86::visit(Add * ir)
     {
+        if (ir->m_type == ResultType::Double)
+        {
+        InsertToFReg(ir->m_right);
+        InsertToFReg(ir->m_left);
+
+        m_last_label = m_pb.add(FADD{FReg(ir->m_left->m_memVal),FReg(ir->m_right->m_memVal)});
+        m_fregs.insert(ir->m_right->m_memVal);
+        ir->m_memType = 'r';
+        ir->m_memVal = ir->m_left->m_memVal;
+        }
+        else{
+
         InsertToReg(ir->m_right);
         InsertToReg(ir->m_left);
 
@@ -245,11 +363,24 @@ namespace tinyc
         ir->m_memType = 'r';
         ir->m_memVal = ir->m_left->m_memVal;
 
+        }
         CheckSpill(ir);
     }
     
     void IRTot86::visit(Sub * ir)
     {
+        if (ir->m_type == ResultType::Double)
+        {
+        InsertToFReg(ir->m_right);
+        InsertToFReg(ir->m_left);
+
+        m_last_label = m_pb.add(FSUB{FReg(ir->m_left->m_memVal),FReg(ir->m_right->m_memVal)});
+        m_fregs.insert(ir->m_right->m_memVal);
+        ir->m_memType = 'r';
+        ir->m_memVal = ir->m_left->m_memVal;
+        }
+        else{
+
         InsertToReg(ir->m_right);
         InsertToReg(ir->m_left);
 
@@ -258,6 +389,7 @@ namespace tinyc
         ir->m_memType = 'r';
         ir->m_memVal = ir->m_left->m_memVal;
 
+        }
         CheckSpill(ir);
     }
     
@@ -541,11 +673,23 @@ namespace tinyc
     
     void IRTot86::visit(Minus * ir)
     {
-        InsertToReg(ir->m_left);
-        m_last_label = m_pb.add(NEG{Reg(ir->m_left->m_memVal)});
-        ir->m_memType = 'r';
-        ir->m_memVal = ir->m_left->m_memVal;
-        CheckSpill(ir);
+        if (ir->m_left->m_type == ResultType::Integer)
+        {
+            InsertToReg(ir->m_left);
+            m_last_label = m_pb.add(NEG{Reg(ir->m_left->m_memVal)});
+            ir->m_memType = 'r';
+            ir->m_memVal = ir->m_left->m_memVal;
+            CheckSpill(ir);
+        }
+        else if (ir->m_left->m_type == ResultType::Double)
+        {
+            InsertToFReg(ir->m_left);
+            m_last_label = m_pb.add(FMUL{FReg(ir->m_left->m_memVal),-1});
+            ir->m_memType = 'r';
+            ir->m_memVal = ir->m_left->m_memVal;
+            CheckSpill(ir);            
+        }
+
     }
     
     void IRTot86::visit(Not * ir)
@@ -598,9 +742,11 @@ namespace tinyc
     void IRTot86::visit(Castctod * ir)
     {
         InsertToReg(ir->m_val);
-        m_last_label = m_pb.add(EXT{FReg(0),Reg(ir->m_val->m_memVal)});
+        int regNum = NextFReg();
+        m_last_label = m_pb.add(EXT{FReg(regNum),Reg(ir->m_val->m_memVal)});
+        m_regs.insert(ir->m_val->m_memVal);
         ir->m_memType = 'r';
-        ir->m_memVal = 0;
+        ir->m_memVal = regNum;
         ir->m_type = ResultType::Double;
         CheckSpill(ir);
     }
@@ -608,17 +754,21 @@ namespace tinyc
     void IRTot86::visit(Castitod * ir)
     {
         InsertToReg(ir->m_val);
-        m_last_label = m_pb.add(EXT{FReg(0),Reg(ir->m_val->m_memVal)});
+        int regNum = NextFReg();
+        m_last_label = m_pb.add(EXT{FReg(regNum),Reg(ir->m_val->m_memVal)});
+        m_regs.insert(ir->m_val->m_memVal);
         ir->m_memType = 'r';
-        ir->m_memVal = 0;
+        ir->m_memVal = regNum;
         ir->m_type = ResultType::Double;
         CheckSpill(ir);
     }
     
     void IRTot86::visit(Castdtoi * ir)
     {
-        InsertToReg(ir->m_val);
-        m_last_label = m_pb.add(NRW{Reg(0),FReg(ir->m_val->m_memVal)});
+        InsertToFReg(ir->m_val);
+        int regNum = NextReg();
+        m_last_label = m_pb.add(NRW{Reg(regNum),FReg(ir->m_val->m_memVal)});
+        m_fregs.insert(ir->m_val->m_memVal);
         ir->m_memType = 'r';
         ir->m_memVal = 0;
         ir->m_type = ResultType::Integer;
@@ -704,10 +854,21 @@ namespace tinyc
     
     void IRTot86::visit(DebugWrite * ir)
     {
-        InsertToReg(ir->m_val);
-        m_last_label = m_pb.add(MOV{Reg(0),Reg(ir->m_val->m_memVal)});
-        m_pb.add(DBG{ [](const Cpu & cpu){std::cout << cpu.getRegister(Reg(0)) << std::endl;}});
-        m_regs.insert(ir->m_val->m_memVal);
+        if (ir->m_val->m_type == ResultType::Integer)
+        {
+            InsertToReg(ir->m_val);
+            m_last_label = m_pb.add(MOV{Reg(0),Reg(ir->m_val->m_memVal)});
+            m_pb.add(DBG{ [](const Cpu & cpu){std::cout << cpu.getRegister(Reg(0)) << std::endl;}});
+            m_regs.insert(ir->m_val->m_memVal);
+        }
+        else if (ir->m_val->m_type == ResultType::Double)
+        {
+            InsertToFReg(ir->m_val);
+            m_last_label = m_pb.add(MOV{FReg(0),FReg(ir->m_val->m_memVal)});
+            m_pb.add(DBG{ [](const Cpu & cpu){std::cout << cpu.getFloatRegister(FReg(0)) << std::endl;}});
+            m_fregs.insert(ir->m_val->m_memVal);       
+        }
+ 
     }
     
     void IRTot86::visit(NOP * ir)
@@ -727,7 +888,16 @@ namespace tinyc
                 m_pb.add(PUSH{Reg(spilled_regs[i])});
                 m_regs.insert(spilled_regs[i]);
             }
-            m_spilled_regs.push_back(std::move(spilled_regs));        
+            m_spilled_regs.push_back(std::move(spilled_regs)); 
+            
+            std::vector<int> spilled_fregs;
+            AllUsedFRegs(spilled_fregs);
+            for (int i = 0; i < spilled_fregs.size(); i++)
+            {
+                m_pb.add(FPUSH{FReg(spilled_fregs[i])});
+                m_fregs.insert(spilled_fregs[i]);
+            }
+            m_spilled_fregs.push_back(std::move(spilled_fregs)); 
         }
         else
         {
@@ -741,15 +911,35 @@ namespace tinyc
                         m_regs.erase(it);
                 }
             m_spilled_regs.pop_back();
+
+            std::vector<int> & spilled_fregs = m_spilled_fregs[m_spilled_fregs.size()-1]; 
+
+                for (auto x = spilled_fregs.rbegin(); x != spilled_fregs.rend(); ++x)
+                {
+                    m_pb.add(FPOP{FReg(*x)});
+                    auto it = m_fregs.find(*x);
+                    if (it != m_fregs.end())
+                        m_fregs.erase(it);
+                }
+            m_spilled_fregs.pop_back();
         }
     }
     
     void IRTot86::visit(StoreParam * ir)
     {
-        InsertToReg(ir->m_address);
-        m_pb.add(PUSH{Reg(ir->m_address->m_memVal)});
-        ir->m_address->m_memType = 'x';
-        m_regs.insert(ir->m_address->m_memVal);
+        if (ir->m_address->m_type == ResultType::Double)
+        {
+            InsertToFReg(ir->m_address);
+            m_pb.add(FPUSH{FReg(ir->m_address->m_memVal)});
+            ir->m_address->m_memType = 'x';
+            m_fregs.insert(ir->m_address->m_memVal);            
+        }
+        else{
+            InsertToReg(ir->m_address);
+            m_pb.add(PUSH{Reg(ir->m_address->m_memVal)});
+            ir->m_address->m_memType = 'x';
+            m_regs.insert(ir->m_address->m_memVal);           
+        }
     }
     
     Program IRTot86::GetProgram()
@@ -760,6 +950,11 @@ namespace tinyc
     int IRTot86::NextReg()
     {
         return m_regs.extract(m_regs.begin()).value();
+    }
+    
+    int IRTot86::NextFReg()
+    {
+        return m_fregs.extract(m_fregs.begin()).value();
     }
     
     void IRTot86::AllUsedRegs(std::vector<int> & regs)
@@ -773,23 +968,15 @@ namespace tinyc
         }
     }
     
-    void IRTot86::ValuesToSpill(std::vector<int> & regs,std::vector<Instruction*> & args)
+    void IRTot86::AllUsedFRegs(std::vector<int> & fregs)
     {
-        std::set<int> reg_args;
-        for (auto & x : args)
-            if (x->m_memType == 'r')
-                reg_args.insert(x->m_memVal);
         int current = 0;
-        for (auto & x : m_regs){
+        for (auto & x : m_fregs){
             while (x > current){
-                auto it = reg_args.find(current);
-                if (it == reg_args.end())
-                    regs.push_back(current++);
-                else
-                    current++;
+                fregs.push_back(current++);
             }
             current++;
-        }
+        }        
     }
     
     void IRTot86::AddLabel(Block * block)
@@ -810,10 +997,20 @@ namespace tinyc
     
     void IRTot86::CheckSpill(Instruction * ir)
     {
-        if (ir->m_memType == 'r' && ir->m_type == ResultType::Integer && m_regs.size() < 2){
-            m_pb.add(PUSH{Reg(ir->m_memVal)});
-            ir->m_memType = 'x';
-            m_regs.insert(ir->m_memVal);
+        if (ir->m_memType == 'r' &&  m_regs.size() < 2){
+            if (ir->m_type == ResultType::Integer)
+            {
+                m_pb.add(PUSH{Reg(ir->m_memVal)});
+                ir->m_memType = 'x';
+                m_regs.insert(ir->m_memVal);
+            }
+            if (ir->m_type == ResultType::Double)
+            {
+                m_pb.add(FPUSH{FReg(ir->m_memVal)});
+                ir->m_memType = 'x';
+                m_fregs.insert(ir->m_memVal);
+            }
+
         }
     }
     
@@ -839,21 +1036,25 @@ namespace tinyc
         ir->m_memVal = regNum;
     }
     
-    int IRTot86::FindMaxArgs(Function * fun)
+    void IRTot86::InsertToFReg(Instruction * ir)
     {
-        int max = 0;
-        for (auto & x : fun->m_blocks)
-        {
-            for (auto & y : x->m_block)
-            {
-                if (CallStatic * call = dynamic_cast<CallStatic*>(y))
-                {
-                    int size = call->m_args.size();
-                    if (size > max)
-                        max = size;
-                }
-            }
+        if (ir->m_memType == 'r')
+            return;
+
+        int regNum = NextFReg();
+        if (ir->m_memType == 'm'){
+            m_pb.add(MOV{FReg(regNum),Mem(ir->m_memVal)});
         }
-        return max;
+        else if (ir->m_memType == 'x'){
+            m_pb.add(FPOP{FReg(regNum)});
+        }
+        else if (ir->m_memType == 's'){
+            int regN = NextReg();
+            m_pb.add(MOV{Reg(regN),Mem(Bp() - ir->m_memVal)});
+            m_pb.add(MOV{FReg(regNum),Reg(regN)});
+            m_regs.insert(regN);
+        }
+        ir->m_memType = 'r';
+        ir->m_memVal = regNum;        
     }
 }

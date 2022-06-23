@@ -18,7 +18,7 @@ namespace tinyc {
 
     class IRTot86 : public IRVisitor {
         public:
-            IRTot86(int maxReg = 10);
+            IRTot86(int maxReg = 10, int maxFreg = 5);
             void visit(Fun_address * ir);
             void visit(Call * ir);
             void visit(CallStatic * ir);
@@ -74,24 +74,28 @@ namespace tinyc {
             Program GetProgram();
         protected:
             int NextReg();
+            int NextFReg();
             void AllUsedRegs(std::vector<int> & regs);
-            void ValuesToSpill(std::vector<int> & regs,std::vector<Instruction*> & args);
+            void AllUsedFRegs(std::vector<int> & fregs);
             void AddLabel(Block * block);
             void PatchLabels();
             void CheckSpill(Instruction * ir);
             void InsertToReg(Instruction * ir);
-            int FindMaxArgs(Function * fun);
+            void InsertToFReg(Instruction * ir);
             ProgramBuilder m_pb;
             int m_alloc_counter;
             int m_global_counter;
             int m_arg_counter;
             int m_max_regs;
+            int m_max_fregs;
             std::set<int> m_regs;
+            std::set<int> m_fregs;
             std::unordered_map<Block*,Label> m_block_labels;
             std::vector<std::pair<Label,Block*>> m_patch_labels;
             std::unordered_map<std::string,Label> m_funs;
             std::vector<Label> m_rets;
             std::vector<std::vector<int>> m_spilled_regs;
+            std::vector<std::vector<int>> m_spilled_fregs;
             Label m_last_label;
             Label m_jump_label;
             
