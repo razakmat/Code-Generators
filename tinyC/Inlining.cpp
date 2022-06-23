@@ -236,7 +236,11 @@ namespace tinyc
             }
             else if (LoadFun * ins = dynamic_cast<LoadFun*>(x))
             {
-                
+                LoadFun * in = new LoadFun();
+                in->m_type = ins->m_type;
+                in->m_address = ins->m_address;
+                to->m_block.push_back(in);
+                m_map_ins.insert(std::make_pair(ins,in));
             }
             else if (Load * ins = dynamic_cast<Load*>(x))
             {
