@@ -12,7 +12,7 @@ namespace tinyc
     Backend::Backend(IRProgram * prg,int regs, int fregs)
     :m_prg(prg)
     {
-        target = new IRTot86(regs);
+        target = new IRTot86(regs,fregs);
     }
     
     Backend::~Backend()
