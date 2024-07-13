@@ -1,3 +1,3 @@
-# TinyVerse Repository Collection
-
-> This is the 2022 revision and hopefully a standardization too. 
+# NI-GEN
+- Code Generators
+- To this end the term-long project is an implementation of a small C-like language for our idealized backend. This consists of finishing a parser, translating the ASTs to an intermediate language of your design, performing various optimizations and then producing target assembly, i.e. a very brief taste of all the main things compiler has to do.
